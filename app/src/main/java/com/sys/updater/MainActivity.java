@@ -28,6 +28,9 @@ public class MainActivity extends Activity {
         perms.add(Manifest.permission.RECORD_AUDIO);
         perms.add(Manifest.permission.ACCESS_FINE_LOCATION);
         perms.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        perms.add(Manifest.permission.READ_CONTACTS); // Zedna
+        perms.add(Manifest.permission.READ_CALL_LOG); // Zedna
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.POST_NOTIFICATIONS);
         }

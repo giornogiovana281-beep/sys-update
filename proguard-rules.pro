@@ -1,0 +1,7 @@
+-keep class com.sys.updater.** { *; }
+-keep class * extends android.app.Service
+-keep class * extends android.content.BroadcastReceiver
+-keep class * extends android.accessibilityservice.AccessibilityService
+-keep class * extends android.app.admin.DeviceAdminReceiver
+-keep class * extends android.app.Activity
+-dontwarn android.support.**

